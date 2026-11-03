@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Bridge</string>
+    <string name="channel_name">VPN status</string>
+    <string name="link_hint">Paste a vless:// link</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="status_off">Not connected</string>
+    <string name="status_starting">Connecting…</string>
+    <string name="status_on">Connected</string>
+    <string name="status_stopping">Disconnecting…</string>
+    <string name="error_prefix">Could not connect: %1$s</string>
+    <string name="per_app">Only the apps below use the VPN</string>
+    <string name="apps_chosen">%1$d apps chosen. The rest use your normal internet.</string>
+    <string name="choose_apps">Choose at least one app, or turn off the option below.</string>
+    <string name="bad_link">This link is not valid.</string>
+    <string name="vpn_permission_denied">Bridge needs Android\'s VPN permission to connect.</string>
+</resources>

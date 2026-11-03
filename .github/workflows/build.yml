@@ -1,0 +1,113 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SING_BOX_VERSION: 1.14.4
+
+jobs:
+  libbox:
+    name: sing-box library
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reuse the library if this version was already built
+        id: cached
+        uses: actions/cache@v4
+        with:
+          path: libbox.aar
+          key: libbox-${{ env.SING_BOX_VERSION }}-arm64-arm-v1
+      - name: Get sing-box
+        if: steps.cached.outputs.cache-hit != 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: SagerNet/sing-box
+          ref: v${{ env.SING_BOX_VERSION }}
+          path: sing-box
+      - name: Set up Go
+        if: steps.cached.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.10
+          cache: false
+      - name: Set up the Android NDK
+        if: steps.cached.outputs.cache-hit != 'true'
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+      - name: Set up Java
+        if: steps.cached.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Build the library
+        if: steps.cached.outputs.cache-hit != 'true'
+        working-directory: sing-box
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          git tag "v$SING_BOX_VERSION" -f
+          make lib_install
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go run ./cmd/internal/build_libbox -target android -platform android/arm64,android/arm
+          mv libbox.aar ../libbox.aar
+      - name: Keep the library for the next job
+        uses: actions/upload-artifact@v4
+        with:
+          name: libbox
+          path: libbox.aar
+          compression-level: 0
+          retention-days: 2
+
+  apk:
+    name: Test and build the APK
+    runs-on: ubuntu-latest
+    needs: libbox
+    steps:
+      - uses: actions/checkout@v5
+      - name: Get the sing-box library
+        uses: actions/download-artifact@v5
+        with:
+          name: libbox
+          path: app/libs
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: 9.7.0
+      - name: Keep the same signing key between builds, so a new APK installs over the old one
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-${{ github.run_id }}
+          restore-keys: debug-keystore-
+      - name: Run the tests
+        run: gradle --no-daemon :app:testDebugUnitTest
+      - name: Check the generated configs with sing-box itself
+        run: |
+          curl -fsSL -o sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v$SING_BOX_VERSION/sing-box-$SING_BOX_VERSION-linux-amd64.tar.gz"
+          tar -xzf sing-box.tar.gz --strip-components=1 --wildcards '*/sing-box'
+          ls app/build/generated-configs/*.json
+          for config in app/build/generated-configs/*.json; do
+            echo "checking $config"
+            ./sing-box check -c "$config"
+          done
+      - name: Build the APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bridge-android-test
+          path: app/build/outputs/apk/debug/*.apk
+          compression-level: 0
+      - name: Show the test report if something failed
+        if: failure()
+        run: find app/build/test-results -name '*.xml' -exec grep -l '<failure' {} + | xargs -r cat

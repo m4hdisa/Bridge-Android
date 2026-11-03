@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_name">وضعیت VPN</string>
+    <string name="link_hint">لینک vless:// را اینجا بگذارید</string>
+    <string name="connect">اتصال</string>
+    <string name="disconnect">قطع اتصال</string>
+    <string name="status_off">وصل نیست</string>
+    <string name="status_starting">در حال اتصال…</string>
+    <string name="status_on">وصل است</string>
+    <string name="status_stopping">در حال قطع اتصال…</string>
+    <string name="error_prefix">اتصال برقرار نشد: %1$s</string>
+    <string name="per_app">فقط برنامه‌های زیر از VPN استفاده کنند</string>
+    <string name="apps_chosen">%1$d برنامه انتخاب شده. بقیه از اینترنت معمولی استفاده می‌کنند.</string>
+    <string name="choose_apps">حداقل یک برنامه انتخاب کنید، یا گزینه‌ی زیر را خاموش کنید.</string>
+    <string name="bad_link">این لینک معتبر نیست.</string>
+    <string name="vpn_permission_denied">Bridge برای اتصال به مجوز VPN اندروید نیاز دارد.</string>
+</resources>
