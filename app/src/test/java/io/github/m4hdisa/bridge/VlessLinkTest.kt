@@ -19,14 +19,14 @@ class VlessLinkTest {
 
     @Test
     fun reality() {
-        val s = VlessLink.parse("vless://$uuid@203.0.113.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=abcDEF123&sid=6ba8&type=tcp#Reality%20Server")
+        val s = VlessLink.parse("vless://$uuid@203.0.113.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.example.com&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=6ba8&type=tcp#Reality%20Server")
         saveConfig("reality", s)
         assertEquals("Reality Server", s.name)
         assertEquals(443, s.outbound.getInt("server_port"))
         assertEquals("xtls-rprx-vision", s.outbound.getString("flow"))
         val tls = s.outbound.getJSONObject("tls")
         assertEquals("www.example.com", tls.getString("server_name"))
-        assertEquals("abcDEF123", tls.getJSONObject("reality").getString("public_key"))
+        assertEquals("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", tls.getJSONObject("reality").getString("public_key"))
         assertFalse(s.outbound.has("transport"))
     }
 
