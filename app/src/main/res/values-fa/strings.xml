@@ -1,7 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="channel_name">وضعیت VPN</string>
-    <string name="link_hint">لینک vless:// را اینجا بگذارید</string>
+
+    <string name="nav_home">خانه</string>
+    <string name="nav_servers">سرورها</string>
+    <string name="nav_apps">برنامه‌ها</string>
+    <string name="nav_settings">تنظیمات</string>
+
     <string name="connect">اتصال</string>
     <string name="disconnect">قطع اتصال</string>
     <string name="status_off">وصل نیست</string>
@@ -9,9 +14,86 @@
     <string name="status_on">وصل است</string>
     <string name="status_stopping">در حال قطع اتصال…</string>
     <string name="error_prefix">اتصال برقرار نشد: %1$s</string>
-    <string name="per_app">فقط برنامه‌های زیر از VPN استفاده کنند</string>
-    <string name="apps_chosen">%1$d برنامه انتخاب شده. بقیه از اینترنت معمولی استفاده می‌کنند.</string>
-    <string name="choose_apps">حداقل یک برنامه انتخاب کنید، یا گزینه‌ی زیر را خاموش کنید.</string>
-    <string name="bad_link">این لینک معتبر نیست.</string>
     <string name="vpn_permission_denied">Bridge برای اتصال به مجوز VPN اندروید نیاز دارد.</string>
+
+    <string name="home_server">سرور</string>
+    <string name="auto_name">خودکار (سریع‌ترین سرور)</string>
+    <string name="auto_now">خودکار، الان روی %1$s</string>
+    <string name="no_server">هنوز سروری نیست</string>
+    <string name="add_server_hint">برای افزودن بزنید</string>
+    <string name="test_connection">آزمایش اتصال</string>
+    <string name="testing">در حال آزمایش…</string>
+    <string name="test_result">%1$d میلی‌ثانیه · %2$s</string>
+    <string name="test_failed">آزمایش از سرور رد نشد</string>
+    <string name="test_needs_connection">اول وصل شوید</string>
+    <string name="apps_all">همه‌ی برنامه‌ها از VPN استفاده می‌کنند</string>
+    <string name="apps_some">%1$d برنامه از VPN استفاده می‌کنند و بقیه از اینترنت معمولی</string>
+    <string name="iran_skips">سایت‌های ایرانی از VPN رد نمی‌شوند</string>
+
+    <string name="servers_title">سرورها</string>
+    <string name="ping_all">اندازه‌گیری همه‌ی سرورها</string>
+    <string name="update_subs">به‌روزرسانی سابسکریپشن‌ها</string>
+    <string name="add">افزودن</string>
+    <string name="menu_paste">جای‌گذاری از کلیپ‌بورد</string>
+    <string name="menu_enter">وارد کردن لینک یا سابسکریپشن</string>
+    <string name="menu_public">کانفیگ‌های عمومی رایگان</string>
+    <string name="subscriptions_header">سابسکریپشن‌ها</string>
+    <string name="servers_header">سرورها</string>
+    <string name="sub_subtitle">%1$d سرور · %2$s</string>
+    <string name="sub_never">هنوز به‌روز نشده</string>
+    <string name="sub_update">به‌روزرسانی</string>
+    <string name="sub_copy">کپی آدرس</string>
+    <string name="remove">حذف</string>
+    <string name="server_copy">کپی لینک</string>
+    <string name="unusable">قابل استفاده نیست: %1$s</string>
+    <string name="empty_servers">هنوز سروری نیست. یک لینک یا سابسکریپشن اضافه کنید، یا کانفیگ‌های عمومی رایگان را امتحان کنید.</string>
+    <string name="added_servers">%1$d سرور اضافه شد</string>
+    <string name="added_none">سرور تازه‌ای در این متن نبود</string>
+    <string name="clipboard_empty">کلیپ‌بورد خالی است</string>
+    <string name="enter_title">افزودن لینک یا سابسکریپشن</string>
+    <string name="enter_hint">vless://… یا https://…</string>
+    <string name="cancel">انصراف</string>
+    <string name="sub_added">سابسکریپشن با %1$d سرور اضافه شد</string>
+    <string name="sub_failed">به‌روزرسانی %1$s انجام نشد: %2$s</string>
+    <string name="subs_updated">سابسکریپشن‌ها به‌روز شدند</string>
+    <string name="updating">در حال به‌روزرسانی…</string>
+    <string name="pinging">در حال اندازه‌گیری…</string>
+    <string name="delay_ms">%1$d میلی‌ثانیه</string>
+    <string name="delay_failed">جواب نداد</string>
+    <string name="reconnect_needed">برای استفاده دوباره وصل شوید</string>
+    <string name="reconnect">اتصال دوباره</string>
+    <string name="copied">کپی شد</string>
+
+    <string name="public_title">از کانفیگ‌های عمومی رایگان استفاده شود؟</string>
+    <string name="public_warning">معلوم نیست این سرورها را چه کسی اداره می‌کند. آن‌ها آی‌پی شما و سایت‌هایی را که باز می‌کنید می‌بینند و ممکن است هر کدام دست کسی باشد که کاربرانش را زیر نظر دارد. فقط برای وصل شدن به اینترنت و گشت‌وگذار معمولی از آن‌ها استفاده کنید، نه برای ورود به حساب‌ها، کارهای بانکی یا هر کار حساسی.</string>
+    <string name="public_how">Bridge فهرست روزانه‌اش را از GitHub می‌گیرد، کانفیگ‌ها را روی شبکه‌ی شما اندازه می‌گیرد و سریع‌ترها را نگه می‌دارد. این کار تا یک دقیقه طول می‌کشد.</string>
+    <string name="public_confirm">متوجه شدم، پیدا کن</string>
+    <string name="public_downloading">در حال گرفتن فهرست‌های عمومی…</string>
+    <string name="public_testing">در حال اندازه‌گیری کانفیگ‌ها روی شبکه‌ی شما…</string>
+    <string name="public_done">%1$d کانفیگ عمومی اضافه شد</string>
+    <string name="public_none">هیچ‌کدام از کانفیگ‌های عمومی الان روی این شبکه جواب نمی‌دهد</string>
+    <string name="public_failed">فهرست‌های عمومی در دسترس نیستند: %1$s</string>
+    <string name="public_name">عمومی %1$d</string>
+    <string name="public_sub_name">کانفیگ‌های عمومی</string>
+
+    <string name="per_app">فقط برنامه‌های انتخاب‌شده از VPN استفاده کنند</string>
+    <string name="per_app_off_hint">همه‌ی برنامه‌ها از VPN استفاده می‌کنند. برای انتخاب برنامه‌ها این گزینه را روشن کنید.</string>
+    <string name="apps_chosen">%1$d برنامه انتخاب شده. بقیه از اینترنت معمولی استفاده می‌کنند.</string>
+    <string name="choose_apps">حداقل یک برنامه انتخاب کنید، یا Per-App را در صفحه‌ی برنامه‌ها خاموش کنید.</string>
+    <string name="search_apps">جست‌وجوی برنامه‌ها</string>
+    <string name="applies_next">بعد از اتصال دوباره اعمال می‌شود</string>
+
+    <string name="bypass_iran">سایت‌های ایرانی از VPN رد نشوند</string>
+    <string name="bypass_iran_hint">سایت‌های .ir و آدرس‌های ایرانی مستقیم باز می‌شوند، مثل نسخه‌ی ویندوز.</string>
+    <string name="language">زبان</string>
+    <string name="language_system">زبان گوشی</string>
+    <string name="log">لاگ</string>
+    <string name="log_hint">چیزهایی که sing-box در آخرین اتصال نوشته است</string>
+    <string name="log_empty">هنوز لاگی نیست. یک بار وصل شوید تا اینجا بیاید.</string>
+    <string name="copy">کپی</string>
+    <string name="close">بستن</string>
+    <string name="about">درباره</string>
+    <string name="version">نسخه‌ی %1$s</string>
+    <string name="credits">با sing-box کار می‌کند (GPL-3.0-or-later). Bridge با sing-box ارتباطی ندارد.</string>
+    <string name="no_servers">اول یک سرور اضافه کنید</string>
 </resources>

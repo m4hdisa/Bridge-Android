@@ -7,6 +7,8 @@ on:
 
 env:
   SING_BOX_VERSION: 1.14.4
+  # The test server's user; the emulator test connects with it.
+  TEST_UUID: b831381d-6324-4d53-ad4f-8cda48b30811
 
 jobs:
   libbox:
@@ -18,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: libbox.aar
-          key: libbox-${{ env.SING_BOX_VERSION }}-arm64-arm-v1
+          key: libbox-${{ env.SING_BOX_VERSION }}-arm64-arm-amd64-lean-v1
       - name: Get sing-box
         if: steps.cached.outputs.cache-hit != 'true'
         uses: actions/checkout@v5
@@ -44,16 +46,22 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # sing-box's own build adds Tailscale, NaiveProxy, OpenVPN and more, which Bridge doesn't use;
+      # without them the library is much smaller. The rest are its own build settings.
       - name: Build the library
         if: steps.cached.outputs.cache-hit != 'true'
         working-directory: sing-box
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: |
-          git tag "v$SING_BOX_VERSION" -f
           make lib_install
           export PATH="$PATH:$(go env GOPATH)/bin"
-          go run ./cmd/internal/build_libbox -target android -platform android/arm64,android/arm
+          gomobile bind -v -o libbox.aar \
+            -target android/arm64,android/arm,android/amd64 -androidapi 24 \
+            -javapkg=io.nekohasekai -libname=box -trimpath -buildvcs=false \
+            -ldflags "-X github.com/sagernet/sing-box/constant.Version=$SING_BOX_VERSION -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid=" \
+            -tags with_gvisor,with_quic,with_wireguard,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0 \
+            ./experimental/libbox
           mv libbox.aar ../libbox.aar
       - name: Keep the library for the next job
         uses: actions/upload-artifact@v4
@@ -64,7 +72,7 @@ jobs:
           retention-days: 2
 
   apk:
-    name: Test and build the APK
+    name: Test and build the APKs
     runs-on: ubuntu-latest
     needs: libbox
     steps:
@@ -74,6 +82,14 @@ jobs:
         with:
           name: libbox
           path: app/libs
+      - name: Get the Iranian site and address lists
+        run: |
+          mkdir -p app/src/main/assets/rules app/build/rules
+          for name in geoip-ir.srs geosite-ir.srs; do
+            curl -fsSL -o "app/src/main/assets/rules/$name" "https://raw.githubusercontent.com/Chocolate4U/Iran-sing-box-rules/rule-set/$name"
+            cp "app/src/main/assets/rules/$name" app/build/rules/
+          done
+          ls -l app/src/main/assets/rules
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
@@ -83,7 +99,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: 9.7.0
-      - name: Keep the same signing key between builds, so a new APK installs over the old one
+      - name: Keep the same debug key between builds, so a test APK installs over the last one
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
@@ -100,14 +116,80 @@ jobs:
             echo "checking $config"
             ./sing-box check -c "$config"
           done
-      - name: Build the APK
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Upload the APK
+      - name: Build the APKs
+        run: gradle --no-daemon :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Show the APK sizes
+        run: find app/build/outputs/apk -name '*.apk' -exec ls -l {} +
+      - name: Upload the release APKs (unsigned)
         uses: actions/upload-artifact@v4
         with:
-          name: Bridge-android-test
-          path: app/build/outputs/apk/debug/*.apk
+          name: Bridge-android-release-unsigned
+          path: app/build/outputs/apk/release/*.apk
           compression-level: 0
+      - name: Upload the test APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/androidTest/debug/*.apk
+          compression-level: 0
+          retention-days: 7
       - name: Show the test report if something failed
         if: failure()
         run: find app/build/test-results -name '*.xml' -exec grep -l '<failure' {} + | xargs -r cat
+
+  emulator:
+    name: Connect on an emulator
+    runs-on: ubuntu-latest
+    needs: apk
+    steps:
+      - uses: actions/checkout@v5
+      - name: Get the test APKs
+        uses: actions/download-artifact@v5
+        with:
+          name: test-apks
+          path: apks
+      - name: Let the emulator use hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start a VLESS server the emulator reaches at 10.0.2.2
+        run: |
+          curl -fsSL -o sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v$SING_BOX_VERSION/sing-box-$SING_BOX_VERSION-linux-amd64.tar.gz"
+          tar -xzf sing-box.tar.gz --strip-components=1 --wildcards '*/sing-box'
+          cat > server.json <<EOF
+          {
+            "log": { "level": "info", "output": "server.log" },
+            "inbounds": [{ "type": "vless", "tag": "vless-in", "listen": "0.0.0.0", "listen_port": 10808, "users": [{ "uuid": "$TEST_UUID" }] }],
+            "outbounds": [{ "type": "direct" }]
+          }
+          EOF
+          nohup ./sing-box run -c server.json > server.out 2>&1 &
+          sleep 2
+          cat server.out
+      - name: Run the tests on Android 14
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash .github/emulator-test.sh
+      - name: The server saw the test's traffic
+        run: |
+          grep -c "example.com" server.log
+          grep -q "example.com" server.log
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-logs
+          path: |
+            server.log
+            server.out
+            instrument.txt
+            logcat.txt
+          retention-days: 7

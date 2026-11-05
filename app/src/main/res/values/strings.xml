@@ -2,7 +2,12 @@
 <resources>
     <string name="app_name">Bridge</string>
     <string name="channel_name">VPN status</string>
-    <string name="link_hint">Paste a vless:// link</string>
+
+    <string name="nav_home">Home</string>
+    <string name="nav_servers">Servers</string>
+    <string name="nav_apps">Apps</string>
+    <string name="nav_settings">Settings</string>
+
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
     <string name="status_off">Not connected</string>
@@ -10,9 +15,88 @@
     <string name="status_on">Connected</string>
     <string name="status_stopping">Disconnecting…</string>
     <string name="error_prefix">Could not connect: %1$s</string>
-    <string name="per_app">Only the apps below use the VPN</string>
-    <string name="apps_chosen">%1$d apps chosen. The rest use your normal internet.</string>
-    <string name="choose_apps">Choose at least one app, or turn off the option below.</string>
-    <string name="bad_link">This link is not valid.</string>
     <string name="vpn_permission_denied">Bridge needs Android\'s VPN permission to connect.</string>
+
+    <string name="home_server">Server</string>
+    <string name="auto_name">Auto (fastest server)</string>
+    <string name="auto_now">Auto, now on %1$s</string>
+    <string name="no_server">No server yet</string>
+    <string name="add_server_hint">Tap to add one</string>
+    <string name="test_connection">Test connection</string>
+    <string name="testing">Testing…</string>
+    <string name="test_result">%1$d ms · %2$s</string>
+    <string name="test_failed">The test didn\'t get through the server</string>
+    <string name="test_needs_connection">Connect first</string>
+    <string name="apps_all">Every app uses the VPN</string>
+    <string name="apps_some">%1$d apps use the VPN; the rest use your normal internet</string>
+    <string name="iran_skips">Iranian sites skip the VPN</string>
+
+    <string name="servers_title">Servers</string>
+    <string name="ping_all">Measure all servers</string>
+    <string name="update_subs">Update subscriptions</string>
+    <string name="add">Add</string>
+    <string name="menu_paste">Paste from clipboard</string>
+    <string name="menu_enter">Enter a link or subscription</string>
+    <string name="menu_public">Free public configs</string>
+    <string name="subscriptions_header">Subscriptions</string>
+    <string name="servers_header">Servers</string>
+    <string name="sub_subtitle">%1$d servers · %2$s</string>
+    <string name="sub_never">not updated yet</string>
+    <string name="sub_update">Update</string>
+    <string name="sub_copy">Copy address</string>
+    <string name="remove">Remove</string>
+    <string name="server_copy">Copy link</string>
+    <string name="unusable">Can\'t be used: %1$s</string>
+    <string name="empty_servers">No servers yet. Add a share link or a subscription, or try the free public configs.</string>
+    <string name="added_servers">%1$d servers added</string>
+    <string name="added_none">No new servers in that text</string>
+    <string name="clipboard_empty">The clipboard is empty</string>
+    <string name="enter_title">Add a link or subscription</string>
+    <string name="enter_hint">vless://… or https://…</string>
+    <string name="cancel">Cancel</string>
+    <string name="sub_added">Subscription added with %1$d servers</string>
+    <string name="sub_failed">Couldn\'t update %1$s: %2$s</string>
+    <string name="subs_updated">Subscriptions updated</string>
+    <string name="updating">Updating…</string>
+    <string name="pinging">Measuring…</string>
+    <string name="delay_ms">%1$d ms</string>
+    <string name="delay_failed">no answer</string>
+    <string name="reconnect_needed">Reconnect to use it</string>
+    <string name="reconnect">Reconnect</string>
+    <string name="copied">Copied</string>
+
+    <string name="public_title">Use free public configs?</string>
+    <string name="public_warning">Nobody knows who runs these servers. They can see your IP address and which sites you open, and any of them could be run by someone watching its users. Use them to get online and for ordinary browsing, not for logins, banking or anything sensitive.</string>
+    <string name="public_how">Bridge downloads its daily list from GitHub, measures the configs on your network and keeps the fastest. This takes up to a minute.</string>
+    <string name="public_confirm">I understand, find configs</string>
+    <string name="public_downloading">Downloading the public lists…</string>
+    <string name="public_testing">Measuring the configs on your network…</string>
+    <string name="public_done">%1$d public configs added</string>
+    <string name="public_none">None of the public configs answers on this network right now</string>
+    <string name="public_failed">The public lists can\'t be reached: %1$s</string>
+    <string name="public_name">Public %1$d</string>
+    <string name="public_sub_name">Public configs</string>
+
+    <string name="per_app">Only the chosen apps use the VPN</string>
+    <string name="per_app_off_hint">Every app uses the VPN. Turn this on to choose apps.</string>
+    <string name="apps_chosen">%1$d apps chosen. The rest use your normal internet.</string>
+    <string name="choose_apps">Choose at least one app, or turn off Per-App on the Apps page.</string>
+    <string name="search_apps">Search apps</string>
+    <string name="applies_next">Applies when you reconnect</string>
+
+    <string name="bypass_iran">Iranian sites skip the VPN</string>
+    <string name="bypass_iran_hint">.ir sites and Iranian addresses open directly, as on Windows.</string>
+    <string name="language">Language</string>
+    <string name="language_system">Phone\'s language</string>
+    <string name="language_fa" translatable="false">فارسی</string>
+    <string name="language_en" translatable="false">English</string>
+    <string name="log">Log</string>
+    <string name="log_hint">What sing-box wrote during the last connection</string>
+    <string name="log_empty">No log yet. Connect once to see it.</string>
+    <string name="copy">Copy</string>
+    <string name="close">Close</string>
+    <string name="about">About</string>
+    <string name="version">Version %1$s</string>
+    <string name="credits">Runs on sing-box (GPL-3.0-or-later). Bridge is not associated with sing-box.</string>
+    <string name="no_servers">Add a server first</string>
 </resources>

@@ -37,11 +37,14 @@ import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.SystemProxyStatus
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
+import java.io.File
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
+import java.net.ServerSocket
+import java.util.UUID
 import io.nekohasekai.libbox.NetworkInterface as BoxInterface
 import io.nekohasekai.libbox.Notification as BoxNotification
 
@@ -70,24 +73,38 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     private fun startVpn() {
         try {
-            val prefs = Prefs(this)
-            val config = BoxConfig.build(VlessLink.parse(prefs.link))
+            val store = Store(this)
+            val clash = LocalAccess(freePort(), "", secret())
+            val proxy = LocalAccess(freePort(), secret().take(12), secret())
+            val log = File(filesDir, LOG_FILE).apply { delete() }
+            val built = BoxConfig.build(Profile.input(store, Rules.install(this)).copy(logPath = log.path, clash = clash, proxy = proxy))
             val monitor = NetworkMonitor(this).also { this.monitor = it }
             monitor.start()
             val server = CommandServer(this, this).also { this.server = it }
             server.start()
             server.startOrReloadService(
-                config,
+                built.json,
                 OverrideOptions().apply {
-                    if (prefs.perApp) includePackage = StringList((prefs.apps + packageName).toList())
+                    // Bridge's own requests (subscriptions, pings) stay outside the VPN, like any app left out.
+                    val self = if (store.includeSelf) setOf(packageName) else emptySet()
+                    if (store.perApp) {
+                        includePackage = StringList((store.apps + self).toList())
+                    } else if (self.isEmpty()) {
+                        excludePackage = StringList(listOf(packageName))
+                    }
                 },
             )
+            VpnState.session = VpnState.Session(clash, proxy, built.tags)
             VpnState.set(VpnState.Status.Running)
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
             cleanUp(e.message ?: e.toString())
         }
     }
+
+    private fun freePort(): Int = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+
+    private fun secret(): String = UUID.randomUUID().toString().replace("-", "")
 
     private fun stopVpn() {
         if (VpnState.status == VpnState.Status.Stopping) return
@@ -96,6 +113,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun cleanUp(error: String?) {
+        VpnState.session = null
         runCatching { tun?.close() }
         tun = null
         runCatching { server?.closeService() }
@@ -174,6 +192,15 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 // An app removed since it was chosen shouldn't stop the VPN from starting.
                 try {
                     builder.addAllowedApplication(name)
+                } catch (e: NameNotFoundException) {
+                    Log.w(TAG, "not installed: $name", e)
+                }
+            }
+            val exclude = options.excludePackage
+            while (exclude.hasNext()) {
+                val name = exclude.next()
+                try {
+                    builder.addDisallowedApplication(name)
                 } catch (e: NameNotFoundException) {
                     Log.w(TAG, "not installed: $name", e)
                 }
@@ -330,6 +357,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     companion object {
         const val ACTION_STOP = "io.github.m4hdisa.bridge.STOP"
+        const val LOG_FILE = "box.log"
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"
         private const val NOTIFICATION_ID = 1
