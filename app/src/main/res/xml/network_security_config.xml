@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android refuses plain HTTP by default, even to this phone itself, and that silently broke every
+  call to sing-box's Clash API on 127.0.0.1 (measuring servers, switching while connected).
+  Only the phone itself is allowed; everything else stays HTTPS-only.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
