@@ -178,10 +178,14 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash .github/emulator-test.sh
+      # Traffic from the VPN reaches the server by address, not by name, so look for either.
       - name: The server saw the test's traffic
         run: |
-          grep -c "example.com" server.log
-          grep -q "example.com" server.log
+          ips=$( (getent ahostsv4 example.com | awk '{print $1}'; curl -fsS -H 'accept: application/dns-json' 'https://1.1.1.1/dns-query?name=example.com&type=A' | grep -oE '"data":"[0-9.]+"' | cut -d'"' -f4) | sort -u)
+          echo "example.com is at: $ips"
+          pattern="example\.com$(for ip in $ips; do printf '|%s:443' "${ip//./[.]}"; done)"
+          grep -cE "$pattern" server.log
+          grep -qE "$pattern" server.log
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@v4
