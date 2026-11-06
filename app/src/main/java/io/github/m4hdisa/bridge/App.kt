@@ -25,6 +25,13 @@ class App : Application() {
         )
     }
 
+    companion object {
+        private var model: AppModel? = null
+
+        /** The screens' state, kept for as long as the app runs, so turning the phone or changing the language keeps it. */
+        fun model(context: android.content.Context): AppModel = model ?: AppModel(context).also { model = it }
+    }
+
     /** The same Android versions sing-box's own client applies this Go workaround on (golang/go#68760). */
     private fun needsStackFix(): Boolean = BuildConfig.DEBUG ||
         Build.VERSION.SDK_INT == Build.VERSION_CODES.N ||

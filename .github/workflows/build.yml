@@ -90,6 +90,8 @@ jobs:
             cp "app/src/main/assets/rules/$name" app/build/rules/
           done
           ls -l app/src/main/assets/rules
+      - name: Get Xray, checked against known hashes
+        run: bash .github/get-xray.sh
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
@@ -107,15 +109,18 @@ jobs:
           restore-keys: debug-keystore-
       - name: Run the tests
         run: gradle --no-daemon :app:testDebugUnitTest
-      - name: Check the generated configs with sing-box itself
+      - name: Check the generated configs with sing-box and Xray themselves
         run: |
           curl -fsSL -o sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v$SING_BOX_VERSION/sing-box-$SING_BOX_VERSION-linux-amd64.tar.gz"
           tar -xzf sing-box.tar.gz --strip-components=1 --wildcards '*/sing-box'
           ls app/build/generated-configs/*.json
           for config in app/build/generated-configs/*.json; do
+            [ "$(basename "$config")" = xray-process.json ] && continue
             echo "checking $config"
             ./sing-box check -c "$config"
           done
+          # The Android build of Xray for x86_64 runs on the build machine too.
+          app/src/main/jniLibs/x86_64/libxray.so run -test -c app/build/generated-configs/xray-process.json
       - name: Build the APKs
         run: gradle --no-daemon :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Show the APK sizes
@@ -169,6 +174,34 @@ jobs:
           nohup ./sing-box run -c server.json > server.out 2>&1 &
           sleep 2
           cat server.out
+      # A server only Xray can run: VLESS over xhttp with REALITY (borrowing www.google.com's certificate).
+      - name: Start an Xray server (xhttp + REALITY) on 10809
+        run: |
+          curl -fsSL -o xray.zip "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip"
+          echo "0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  xray.zip" | sha256sum -c -
+          unzip -o -q xray.zip xray -d xray-server
+          keys=$(xray-server/xray x25519)
+          private=$(echo "$keys" | awk -F': ' 'NR==1{print $2}')
+          public=$(echo "$keys" | awk -F': ' 'NR==2{print $2}')
+          echo "REALITY_PUBLIC_KEY=$public" >> "$GITHUB_ENV"
+          cat > xray-server.json <<EOF
+          {
+            "log": { "loglevel": "info", "access": "xray-server.log", "error": "xray-server.log" },
+            "inbounds": [{
+              "listen": "0.0.0.0", "port": 10809, "protocol": "vless",
+              "settings": { "clients": [{ "id": "$TEST_UUID" }], "decryption": "none" },
+              "streamSettings": {
+                "network": "xhttp", "xhttpSettings": { "path": "/bridge" },
+                "security": "reality",
+                "realitySettings": { "target": "www.google.com:443", "serverNames": ["www.google.com"], "privateKey": "$private", "shortIds": [""] }
+              }
+            }],
+            "outbounds": [{ "protocol": "freedom" }]
+          }
+          EOF
+          nohup xray-server/xray run -c xray-server.json > xray-server.out 2>&1 &
+          sleep 2
+          cat xray-server.out
       - name: Run the tests on Android 14
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -186,6 +219,10 @@ jobs:
           pattern="example\.com$(for ip in $ips; do printf '|%s:443' "${ip//./[.]}"; done)"
           grep -cE "$pattern" server.log
           grep -qE "$pattern" server.log
+      - name: The Xray server saw the Xray test's traffic
+        run: |
+          grep -E "accepted|example" xray-server.log | tail -5
+          grep -qE "accepted .*(example\.com|:443)" xray-server.log
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -194,6 +231,15 @@ jobs:
           path: |
             server.log
             server.out
+            xray-server.log
+            xray-server.out
             instrument.txt
             logcat.txt
+          retention-days: 7
+      - name: Keep the screenshots of every page
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
           retention-days: 7

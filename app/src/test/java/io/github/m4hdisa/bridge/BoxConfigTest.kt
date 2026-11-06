@@ -59,6 +59,36 @@ class BoxConfigTest {
     }
 
     @Test
+    fun xrayServersAreASocksHopWithAPassword() {
+        val xray = "x" to ShareLink.parse("vless://$uuid@x.example.com:443?type=xhttp&security=tls#X")
+        val dropped = "y" to ShareLink.parse("vless://$uuid@y.example.com:443?type=xhttp&security=tls#Y")
+        val input = BoxInput(
+            listOf(server(0), xray, dropped),
+            "x",
+            listOf("id0", "x"),
+            false,
+            null,
+            null,
+            LocalAccess(9090, "", "secret"),
+            LocalAccess(2080, "user", "pass"),
+            xrayPorts = mapOf("x" to 20000),
+            xrayAuth = LocalAccess(0, "xu", "xs"),
+            directIps = listOf("203.0.113.9"),
+        )
+        val built = BoxConfig.build(input)
+        Configs.write("xray", built)
+        assertEquals("a server Xray couldn't take is left out", setOf("id0", "x"), built.tags.keys)
+        val outbounds = JSONObject(built.json).getJSONArray("outbounds").objects().associateBy { it.getString("tag") }
+        val hop = outbounds.getValue(built.tags.getValue("x"))
+        assertEquals("socks", hop.getString("type"))
+        assertEquals(20000, hop.getInt("server_port"))
+        assertEquals("xu", hop.getString("username"))
+        assertEquals("xs", hop.getString("password"))
+        val rules = JSONObject(built.json).getJSONObject("route").getJSONArray("rules").objects()
+        assertTrue(rules.any { it.optString("outbound") == "direct" && it.optJSONArray("ip_cidr")?.getString(0) == "203.0.113.9/32" })
+    }
+
+    @Test
     fun bridgesOwnProxyNeedsAPasswordAndUsesTheServer() {
         val c = JSONObject(Configs.build(listOf(server(0)), "id0").json)
         val inbound = c.getJSONArray("inbounds").objects().first { it.getString("tag") == "bridge-in" }

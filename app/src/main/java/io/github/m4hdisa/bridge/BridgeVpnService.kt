@@ -38,6 +38,7 @@ import io.nekohasekai.libbox.SystemProxyStatus
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import java.io.File
+import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -45,6 +46,9 @@ import java.net.InterfaceAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.util.UUID
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import io.nekohasekai.libbox.NetworkInterface as BoxInterface
 import io.nekohasekai.libbox.Notification as BoxNotification
 
@@ -57,6 +61,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private var tun: ParcelFileDescriptor? = null
     private var server: CommandServer? = null
     private var monitor: NetworkMonitor? = null
+    private var xray: XrayProcess? = null
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,7 +82,11 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             val clash = LocalAccess(freePort(), "", secret())
             val proxy = LocalAccess(freePort(), secret().take(12), secret())
             val log = File(filesDir, LOG_FILE).apply { delete() }
-            val built = BoxConfig.build(Profile.input(store, Rules.install(this)).copy(logPath = log.path, clash = clash, proxy = proxy))
+            File(filesDir, XRAY_LOG_FILE).delete()
+            var input = Profile.input(store, Rules.install(this)).copy(logPath = log.path, clash = clash, proxy = proxy)
+            val forXray = input.servers.filter { it.second.usesXray }
+            if (forXray.isNotEmpty()) input = startXray(input, forXray, store.includeSelf)
+            val built = BoxConfig.build(input)
             val monitor = NetworkMonitor(this).also { this.monitor = it }
             monitor.start()
             val server = CommandServer(this, this).also { this.server = it }
@@ -102,6 +111,63 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         }
     }
 
+    /**
+     * Starts Xray for the servers only it can run, each on its own local SOCKS port, and returns
+     * the input with those ports. Their addresses are looked up here first, on the phone's own
+     * network: Xray is a plain Linux program to Android and can't use the phone's DNS settings.
+     * If Xray can't start, those servers are left out and the rest still connect.
+     */
+    private fun startXray(input: BoxInput, servers: List<Pair<String, ParsedLink>>, bridgeOnVpn: Boolean): BoxInput {
+        val xray = XrayProcess(this).also { this.xray = it }
+        val xrayLog = File(filesDir, XRAY_LOG_FILE)
+        if (!xray.available) {
+            xrayLog.writeText("This build has no Xray, so ${servers.size} servers that need it are left out\n")
+            return input
+        }
+        val ips = resolveAll(servers.map { Xray.server(it.second.xray!!).first })
+        val auth = LocalAccess(0, secret().take(12), secret())
+        val ports = LinkedHashMap<String, Int>()
+        val entries = servers.map { (id, parsed) ->
+            val outbound = parsed.xray!!
+            val pinned = ips[Xray.server(outbound).first]?.let { Xray.withServerIp(outbound, it) } ?: outbound
+            val port = freePort()
+            ports[id] = port
+            Xray.Entry(port, pinned, if (Xray.needsRelay(pinned)) freePort() else null)
+        }
+        return try {
+            xray.start(Xray.config(entries, auth.user, auth.secret), entries.first().port, xrayLog)
+            input.copy(xrayPorts = ports, xrayAuth = auth, directIps = if (bridgeOnVpn) ips.values.distinct() else emptyList())
+        } catch (e: Exception) {
+            Log.e(TAG, "Xray failed", e)
+            xrayLog.appendText("Xray couldn't start, so ${servers.size} servers that need it are left out: ${e.message}\n")
+            input
+        }
+    }
+
+    /** Each name's first IPv4 address (or IPv6 if it has none), found in parallel within a few seconds. */
+    private fun resolveAll(hosts: List<String>): Map<String, String> {
+        val names = hosts.distinct().filter { it.isNotEmpty() }
+        if (names.isEmpty()) return emptyMap()
+        val pool = Executors.newFixedThreadPool(minOf(16, names.size))
+        return try {
+            pool.invokeAll(
+                names.map { name ->
+                    Callable {
+                        val addresses = runCatching { InetAddress.getAllByName(name).toList() }.getOrDefault(emptyList())
+                        val pick = addresses.firstOrNull { it is Inet4Address } ?: addresses.firstOrNull()
+                        name to pick?.hostAddress
+                    }
+                },
+                RESOLVE_TIMEOUT_MS,
+                TimeUnit.MILLISECONDS,
+            ).mapNotNull { f -> runCatching { f.get() }.getOrNull() }
+                .mapNotNull { (name, ip) -> ip?.let { name to it } }
+                .toMap()
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
     private fun freePort(): Int = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
 
     private fun secret(): String = UUID.randomUUID().toString().replace("-", "")
@@ -119,6 +185,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         runCatching { server?.closeService() }
         runCatching { server?.close() }
         server = null
+        runCatching { xray?.stop() }
+        xray = null
         runCatching { monitor?.stop() }
         monitor = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -358,6 +426,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     companion object {
         const val ACTION_STOP = "io.github.m4hdisa.bridge.STOP"
         const val LOG_FILE = "box.log"
+        const val XRAY_LOG_FILE = "xray.log"
+        private const val RESOLVE_TIMEOUT_MS = 5_000L
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"
         private const val NOTIFICATION_ID = 1

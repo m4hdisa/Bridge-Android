@@ -5,7 +5,7 @@
     android:viewportWidth="100"
     android:viewportHeight="100">
     <path
-        android:fillColor="@color/brand"
+        android:fillColor="@color/primary"
         android:pathData="M22,0 L78,0 Q100,0 100,22 L100,78 Q100,100 78,100 L22,100 Q0,100 0,78 L0,22 Q0,0 22,0 Z" />
     <path
         android:fillColor="#FFFFFFFF"

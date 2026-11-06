@@ -1,23 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Bridge" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/brand</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorPrimaryContainer">#DCE2FF</item>
-        <item name="colorOnPrimaryContainer">#001356</item>
-        <item name="colorSecondaryContainer">#DCE2FF</item>
-        <item name="colorOnSecondaryContainer">#001356</item>
+    <!-- Dark only, like the Windows app. The screen itself is drawn by Compose (ui/Theme.kt); this is what shows while it starts. -->
+    <style name="Theme.Bridge" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorAccent">@color/brand</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-    </style>
-
-    <style name="Bridge.Title" parent="TextAppearance.Material3.HeadlineSmall">
-        <item name="android:textStyle">bold</item>
-    </style>
-
-    <style name="Bridge.Card" parent="Widget.Material3.CardView.Filled">
-        <item name="cardCornerRadius">16dp</item>
-        <item name="contentPadding">16dp</item>
-        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

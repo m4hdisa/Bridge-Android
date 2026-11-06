@@ -9,3 +9,4 @@ app/libs/
 .idea/
 *.iml
 app/src/main/assets/rules/
+app/src/main/jniLibs/

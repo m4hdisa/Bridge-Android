@@ -6,7 +6,12 @@ import org.json.JSONObject
 /** A local port only Bridge may use: the password keeps other apps on the phone out. */
 data class LocalAccess(val port: Int, val user: String, val secret: String)
 
-/** What a config is built from. `servers` are already parsed; `auto` are the ids Auto picks from. */
+/**
+ * What a config is built from. `servers` are already parsed; `auto` are the ids Auto picks from.
+ * Servers only Xray can run are reached on `xrayPorts` (by server id) with `xrayAuth`; one without
+ * a port is left out. `directIps` are those servers' addresses, kept off the VPN when Bridge's
+ * own traffic is in it (the emulator test), so Xray's connections don't loop back into sing-box.
+ */
 data class BoxInput(
     val servers: List<Pair<String, ParsedLink>>,
     val selected: String,
@@ -16,6 +21,9 @@ data class BoxInput(
     val logPath: String?,
     val clash: LocalAccess?,
     val proxy: LocalAccess?,
+    val xrayPorts: Map<String, Int> = emptyMap(),
+    val xrayAuth: LocalAccess? = null,
+    val directIps: List<String> = emptyList(),
 )
 
 /** The config, and each server's outbound tag in it. */
@@ -34,14 +42,22 @@ object BoxConfig {
     const val TEST_URL = "https://www.gstatic.com/generate_204"
 
     fun build(input: BoxInput): BuiltConfig {
-        require(input.servers.isNotEmpty()) { "no servers" }
         val tags = LinkedHashMap<String, String>()
         val outbounds = JSONArray()
         input.servers.forEachIndexed { i, (id, parsed) ->
+            val outbound = if (parsed.usesXray) {
+                val port = input.xrayPorts[id] ?: return@forEachIndexed
+                JSONObject().put("type", "socks").put("server", "127.0.0.1").put("server_port", port).put("version", "5").also { o ->
+                    input.xrayAuth?.let { o.put("username", it.user).put("password", it.secret) }
+                }
+            } else {
+                JSONObject(parsed.outbound.toString())
+            }
             val tag = "s$i"
             tags[id] = tag
-            outbounds.put(JSONObject(parsed.outbound.toString()).put("tag", tag))
+            outbounds.put(outbound.put("tag", tag))
         }
+        require(tags.isNotEmpty()) { "no servers" }
         val autoTags = input.auto.mapNotNull { tags[it] }.ifEmpty { tags.values.toList() }
         val useAuto = tags.size > 1
         val choices = JSONArray()
@@ -69,6 +85,7 @@ object BoxConfig {
             .put(JSONObject().put("action", "sniff"))
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
         if (input.proxy != null) routeRules.put(JSONObject().put("inbound", JSONArray().put("bridge-in")).put("outbound", "proxy"))
+        if (input.directIps.isNotEmpty()) routeRules.put(JSONObject().put("ip_cidr", JSONArray(input.directIps.map { if (':' in it) "$it/128" else "$it/32" })).put("outbound", "direct"))
         routeRules.put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
         if (input.bypassIran) {
             dnsRules.put(JSONObject().put("domain_suffix", JSONArray().put(".ir")).put("server", "local"))

@@ -65,9 +65,14 @@ class NetworkMonitor(context: Context) {
         thread.quitSafely()
     }
 
+    /**
+     * sing-box asks for the network as it starts and dials right after, so the answer is given
+     * at once; posting it for later left sing-box without a network for its first connections
+     * ("missing default interface").
+     */
     fun setListener(listener: InterfaceUpdateListener?) {
         this.listener = listener
-        handler.post { report(defaultNetwork) }
+        if (listener != null) report(defaultNetwork ?: connectivity.activeNetwork)
     }
 
     private fun update(network: Network?) {

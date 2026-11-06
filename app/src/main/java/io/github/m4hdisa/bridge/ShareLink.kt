@@ -6,42 +6,74 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URLDecoder
 
-/** A share link turned into a sing-box outbound. */
-data class ParsedLink(val name: String, val host: String, val port: Int, val kind: String, val outbound: JSONObject)
+/**
+ * A share link turned into an outbound for the core that runs it. For servers only Xray can run,
+ * `xray` is the Xray outbound and `outbound` only says where the server is; at connect time
+ * sing-box gets a SOCKS hop into the Xray process instead.
+ */
+data class ParsedLink(val name: String, val host: String, val port: Int, val kind: String, val outbound: JSONObject, val xray: JSONObject? = null) {
+    val usesXray get() = xray != null
+}
 
-class LinkException(message: String) : Exception(message)
+open class LinkException(message: String) : Exception(message)
+
+/** sing-box can't run this link, but Xray may. */
+private class XrayOnlyException(message: String) : LinkException(message)
 
 /**
  * Reads vless://, vmess://, trojan://, ss://, hysteria2:// and tuic:// links with the same rules
- * as `parser.ts` in the Windows app. Links only Xray can run (xhttp, VLESS Encryption, TCP with an
- * HTTP header) are refused with a reason, since this version has no Xray.
+ * as `parser.ts` in the Windows app: sing-box when it can, otherwise Xray (xhttp, VLESS
+ * Encryption, TCP with an HTTP header, fragmenting).
  */
 object ShareLink {
     private val FINGERPRINTS = setOf("chrome", "firefox", "edge", "safari", "360", "qq", "ios", "android", "random", "randomized")
-    private const val NEEDS_XRAY = "needs the Xray core, which comes in a later version"
+    private const val XRAY_ONLY = "is Xray-only"
 
     fun parse(link: String): ParsedLink {
         val text = link.trim()
         val scheme = text.substringBefore("://", "").lowercase()
-        return when (scheme) {
-            "vless" -> vless(text)
-            "vmess" -> vmess(text)
-            "trojan" -> trojan(text)
-            "ss" -> shadowsocks(text)
-            "hysteria2", "hy2" -> hysteria2(text)
-            "tuic" -> tuic(text)
-            "" -> throw LinkException("This is not a share link")
-            else -> throw LinkException("$scheme:// links are not supported")
+        try {
+            return when (scheme) {
+                "vless" -> vless(text)
+                "vmess" -> vmess(text)
+                "trojan" -> trojan(text)
+                "ss" -> shadowsocks(text)
+                "hysteria2", "hy2" -> hysteria2(text)
+                "tuic" -> tuic(text)
+                "" -> throw LinkException("This is not a share link")
+                else -> throw LinkException("$scheme:// links are not supported")
+            }
+        } catch (e: XrayOnlyException) {
+            val xray = try {
+                Xray.outbound(text)
+            } catch (x: Xray.XrayLinkException) {
+                throw LinkException("${e.message}, and Xray can't run it either: ${x.message}")
+            }
+            return xrayLink(text, scheme, xray)
         }
     }
 
+    private fun xrayLink(link: String, scheme: String, xray: JSONObject): ParsedLink {
+        val (host, port) = Xray.server(xray)
+        val stream = xray.optJSONObject("streamSettings")
+        val name = decode(link.substringAfter('#', ""), plusIsSpace = false).let { n ->
+            if (scheme == "vmess") runCatching { JSONObject(Base64Text.decode(link.substringAfter("://"))).optString("ps") }.getOrDefault("") else n
+        }
+        val transport = stream?.optString("method")?.takeIf { it != "raw" } ?: "tcp"
+        val kind = kind(scheme, transport, stream?.optString("security"))
+        // Only says where the server is; the real hop is made at connect time.
+        val placeholder = JSONObject().put("type", if (scheme == "ss") "shadowsocks" else scheme).put("server", host).put("server_port", port)
+        return ParsedLink(name.ifEmpty { "$host:$port" }, host, port, kind, placeholder, xray)
+    }
+
     /**
-     * Share links in any text: one per line, a whole base64-encoded subscription, or a mix. JSON
-     * config files are left out, since what they hold usually needs Xray.
+     * Share links in any text: one per line, a whole base64-encoded subscription, a mix, or a
+     * JSON config file (Xray, sing-box or Clash), whose servers are written as links.
      */
     fun extract(text: String): List<String> {
         val trimmed = text.trim()
-        if (trimmed.isEmpty() || trimmed.startsWith("{") || trimmed.startsWith("[")) return emptyList()
+        if (trimmed.isEmpty()) return emptyList()
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) return ConfigFile.links(trimmed)
         var body = trimmed
         if ("://" !in trimmed && BASE64.matches(trimmed.filterNot { it.isWhitespace() })) {
             body = try {
@@ -156,7 +188,7 @@ object ShareLink {
         val p = path?.takeIf { it.isNotEmpty() }
         return when (val t = (type ?: "tcp").lowercase()) {
             "tcp", "raw", "" -> {
-                if ((headerType ?: "none").lowercase() == "http") throw LinkException("TCP with an HTTP header $NEEDS_XRAY")
+                if ((headerType ?: "none").lowercase() == "http") throw XrayOnlyException("TCP with an HTTP header $XRAY_ONLY")
                 null
             }
             "ws" -> webSocket(h, p ?: "/")
@@ -171,7 +203,8 @@ object ShareLink {
                 h?.let { o.put("host", it) }
                 p?.let { o.put("path", it) }
             }
-            "xhttp", "splithttp" -> throw LinkException("xhttp $NEEDS_XRAY")
+            "xhttp", "splithttp" -> throw XrayOnlyException("xhttp $XRAY_ONLY")
+            "kcp", "mkcp" -> throw XrayOnlyException("mKCP $XRAY_ONLY")
             else -> throw LinkException("Transport \"$t\" is not supported")
         }
     }
@@ -200,9 +233,9 @@ object ShareLink {
         if (u.user.isEmpty()) throw LinkException("The link is missing the UUID")
         val encryption = (u.param("encryption") ?: "none").lowercase()
         // Xray's post-quantum VLESS Encryption is not in sing-box; connecting without it just times out.
-        if (encryption != "none") throw LinkException("VLESS Encryption $NEEDS_XRAY")
+        if (encryption != "none") throw XrayOnlyException("VLESS Encryption $XRAY_ONLY")
         // Xray's fragment and masking settings change how the connection looks; without them it may be blocked.
-        if (u.param("fm") != null) throw LinkException("This link's fragment setting $NEEDS_XRAY")
+        if (u.param("fm") != null) throw XrayOnlyException("This link's fragment setting $XRAY_ONLY")
         val outbound = JSONObject().put("type", "vless").put("server", u.host).put("server_port", u.port).put("uuid", u.user)
         u.param("flow")?.let { outbound.put("flow", it) }
         tls(u.param("security"), u.param("sni"), u.param("fp"), u.param("alpn"), u.param("allowInsecure").truthy() || u.param("insecure").truthy(), u.param("pbk"), u.param("sid"), u.param("host"))
@@ -330,5 +363,21 @@ object Base64Text {
             }
         }
         return out.toString("UTF-8")
+    }
+
+    /** Standard alphabet, padded. */
+    fun encode(input: String): String {
+        val bytes = input.toByteArray(Charsets.UTF_8)
+        val out = StringBuilder()
+        for (i in bytes.indices step 3) {
+            val b0 = bytes[i].toInt() and 0xFF
+            val b1 = bytes.getOrNull(i + 1)?.toInt()?.and(0xFF)
+            val b2 = bytes.getOrNull(i + 2)?.toInt()?.and(0xFF)
+            out.append(ALPHABET[b0 shr 2])
+            out.append(ALPHABET[((b0 and 0x03) shl 4) or ((b1 ?: 0) shr 4)])
+            out.append(if (b1 == null) '=' else ALPHABET[((b1 and 0x0F) shl 2) or ((b2 ?: 0) shr 6)])
+            out.append(if (b2 == null) '=' else ALPHABET[b2 and 0x3F])
+        }
+        return out.toString()
     }
 }

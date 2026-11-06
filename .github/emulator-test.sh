@@ -8,8 +8,9 @@ adb install -r apks/androidTest/debug/app-debug-androidTest.apk
 adb shell appops set "$app" ACTIVATE_VPN allow
 adb shell pm grant "$app" android.permission.POST_NOTIFICATIONS
 adb logcat -c
-adb shell am instrument -w -r -e uuid "$TEST_UUID" -e port 10808 "$app.test/androidx.test.runner.AndroidJUnitRunner" | tee instrument.txt
+adb shell am instrument -w -r -e uuid "$TEST_UUID" -e port 10808 -e xrayPort 10809 -e realityKey "${REALITY_PUBLIC_KEY:-}" "$app.test/androidx.test.runner.AndroidJUnitRunner" | tee instrument.txt
 adb logcat -d > logcat.txt
+adb pull "/sdcard/Android/data/$app/files/screenshots" screenshots || true
 grep -E "Bridge|sing-box|AndroidRuntime" logcat.txt | tail -n 80
 if grep -q "FAILURES!!!\|INSTRUMENTATION_FAILED\|Process crashed" instrument.txt || ! grep -q "^OK (" instrument.txt; then
   echo "The emulator tests failed"

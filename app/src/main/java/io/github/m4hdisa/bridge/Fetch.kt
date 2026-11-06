@@ -99,8 +99,8 @@ object Subscriptions {
         val text = body.trim()
         return when {
             text.isEmpty() -> "The subscription is empty"
-            text.startsWith("<") -> "The address answered with a web page, not a subscription"
-            text.startsWith("{") || text.startsWith("[") -> "This subscription is a JSON config, which needs the Xray core (a later version)"
+            text.startsWith("<") -> "The address answered with a web page, not a subscription. If it is a panel, copy the subscription link from inside it"
+            Regex("\"(wireguard|WireGuard)\"").containsMatchIn(text) -> "This subscription only has WireGuard (WARP) configs, which Bridge doesn't import"
             else -> "The subscription has no links Bridge can read"
         }
     }
@@ -128,6 +128,17 @@ object PublicConfigs {
         val o = p.outbound
         val host = p.host
         if ((':' !in host && '.' !in host) || host.endsWith(".ir") || host == "localhost" || isPrivate(host)) return "a local or Iranian address"
+        p.xray?.let { x ->
+            val stream = x.optJSONObject("streamSettings")
+            val security = stream?.optString("security").orEmpty()
+            val settings = x.optJSONObject("settings")
+            val protocol = x.optString("protocol")
+            val vlessEncrypted = protocol == "vless" && settings?.optString("encryption").orEmpty().ifEmpty { "none" } != "none"
+            if (security.isEmpty() && (protocol == "trojan" || (protocol == "vless" && !vlessEncrypted))) return "not encrypted"
+            if (protocol == "vmess" && settings?.optString("security") in setOf("none", "zero")) return "not encrypted"
+            if (stream?.optJSONObject("tlsSettings")?.optBoolean("allowInsecure") == true) return "doesn't check the server's certificate"
+            return null
+        }
         val type = o.optString("type")
         if (type == "vmess" && o.optString("security") in setOf("none", "zero")) return "not encrypted"
         if (type == "shadowsocks" && o.optString("method") in setOf("none", "plain")) return "not encrypted"

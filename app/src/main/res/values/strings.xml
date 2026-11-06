@@ -3,51 +3,88 @@
     <string name="app_name">Bridge</string>
     <string name="channel_name">VPN status</string>
 
-    <string name="nav_home">Home</string>
+    <string name="nav_home">Dashboard</string>
     <string name="nav_servers">Servers</string>
     <string name="nav_apps">Apps</string>
+    <string name="nav_logs">Logs</string>
     <string name="nav_settings">Settings</string>
 
+    <!-- Dashboard -->
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>
     <string name="status_off">Not connected</string>
     <string name="status_starting">Connecting…</string>
     <string name="status_on">Connected</string>
     <string name="status_stopping">Disconnecting…</string>
+    <string name="status_off_hint">Press the button to connect</string>
+    <string name="status_starting_hint">Starting the connection</string>
+    <string name="status_on_hint">Through %1$s</string>
+    <string name="status_on_auto_hint">Through the fastest server</string>
     <string name="error_prefix">Could not connect: %1$s</string>
     <string name="vpn_permission_denied">Bridge needs Android\'s VPN permission to connect.</string>
-
+    <string name="mode">Mode</string>
+    <string name="mode_per_app">Per-App</string>
+    <string name="mode_full">Full VPN</string>
+    <string name="mode_per_app_hint">Only the apps you pick on the Apps page use the VPN. Everything else uses your normal internet.</string>
+    <string name="mode_full_hint">Every app on the phone uses the VPN.</string>
     <string name="home_server">Server</string>
-    <string name="auto_name">Auto (fastest server)</string>
-    <string name="auto_now">Auto, now on %1$s</string>
+    <string name="manage_servers">Manage servers</string>
+    <string name="auto_name">Auto</string>
+    <string name="auto_now">Now on %1$s</string>
+    <string name="auto_hint">Fastest of %1$d servers. If one fails, connections move on in a moment.</string>
+    <string name="auto_hint_short">Fastest of %1$d servers</string>
     <string name="no_server">No server yet</string>
     <string name="add_server_hint">Tap to add one</string>
-    <string name="test_connection">Test connection</string>
-    <string name="testing">Testing…</string>
-    <string name="test_result">%1$d ms · %2$s</string>
-    <string name="test_failed">The test didn\'t get through the server</string>
-    <string name="test_needs_connection">Connect first</string>
-    <string name="apps_all">Every app uses the VPN</string>
-    <string name="apps_some">%1$d apps use the VPN; the rest use your normal internet</string>
+    <string name="apps_on_vpn">Apps on VPN</string>
+    <string name="apps_count">%1$d apps on VPN</string>
+    <string name="add_app">Add app</string>
+    <string name="health_title">Connection check</string>
+    <string name="health_vpn">VPN server</string>
+    <string name="health_hint">A real request through the VPN every 30 seconds.</string>
+    <string name="health_paused">Paused</string>
+    <string name="health_checking">Checking…</string>
+    <string name="health_failed">No answer</string>
+    <string name="health_failed_hint">Connected, but nothing gets through this server. Try another one, or look at the log.</string>
+    <string name="health_exit">Exit address</string>
+    <string name="health_check_now">Check now</string>
     <string name="iran_skips">Iranian sites skip the VPN</string>
 
+    <!-- Servers -->
     <string name="servers_title">Servers</string>
-    <string name="ping_all">Measure all servers</string>
+    <string name="servers_subtitle">Subscriptions and configs. The highlighted server is the one Bridge connects to.</string>
+    <string name="test_all">Test all</string>
+    <string name="test">Test</string>
+    <string name="add_servers">Add servers</string>
     <string name="update_subs">Update subscriptions</string>
+    <string name="more">More</string>
     <string name="add">Add</string>
     <string name="menu_paste">Paste from clipboard</string>
+    <string name="menu_paste_hint">Share links, a subscription address or a JSON config</string>
+    <string name="menu_paste_short">Paste</string>
     <string name="menu_enter">Enter a link or subscription</string>
+    <string name="menu_enter_hint">vless://, vmess://, trojan://, ss://, hysteria2://, tuic:// or https://</string>
     <string name="menu_public">Free public configs</string>
-    <string name="subscriptions_header">Subscriptions</string>
-    <string name="servers_header">Servers</string>
-    <string name="sub_subtitle">%1$d servers · %2$s</string>
-    <string name="sub_never">not updated yet</string>
+    <string name="menu_public_hint">From Bridge\'s daily list, measured on your network</string>
+    <string name="menu_public_short">Free configs</string>
+    <string name="manual_configs">Manual configs</string>
+    <string name="manual_hint">Imported from links.</string>
+    <string name="public_badge">Public</string>
+    <string name="public_hint">Unknown servers: only for ordinary browsing.</string>
+    <string name="stat_configs">Configs</string>
+    <string name="stat_usable">%1$d usable</string>
+    <string name="stat_of">of %1$d · %2$d responding</string>
+    <string name="stat_updated">Updated</string>
+    <string name="stat_auto_daily">Again after a day</string>
+    <string name="unsupported_count">Configs Bridge can\'t use: %1$d</string>
+    <string name="pick_server">Choose a server</string>
+    <string name="sub_never">not yet</string>
     <string name="sub_update">Update</string>
     <string name="sub_copy">Copy address</string>
     <string name="remove">Remove</string>
     <string name="server_copy">Copy link</string>
     <string name="unusable">Can\'t be used: %1$s</string>
-    <string name="empty_servers">No servers yet. Add a share link or a subscription, or try the free public configs.</string>
+    <string name="empty_title">No servers yet</string>
+    <string name="empty_servers">Add a share link or a subscription, or try the free public configs.</string>
     <string name="added_servers">%1$d servers added</string>
     <string name="added_none">No new servers in that text</string>
     <string name="clipboard_empty">The clipboard is empty</string>
@@ -60,7 +97,7 @@
     <string name="updating">Updating…</string>
     <string name="pinging">Measuring…</string>
     <string name="delay_ms">%1$d ms</string>
-    <string name="delay_failed">no answer</string>
+    <string name="delay_failed">Timeout</string>
     <string name="reconnect_needed">Reconnect to use it</string>
     <string name="reconnect">Reconnect</string>
     <string name="copied">Copied</string>
@@ -74,29 +111,43 @@
     <string name="public_done">%1$d public configs added</string>
     <string name="public_none">None of the public configs answers on this network right now</string>
     <string name="public_failed">The public lists can\'t be reached: %1$s</string>
-    <string name="public_name">Public %1$d</string>
     <string name="public_sub_name">Public configs</string>
 
-    <string name="per_app">Only the chosen apps use the VPN</string>
-    <string name="per_app_off_hint">Every app uses the VPN. Turn this on to choose apps.</string>
-    <string name="apps_chosen">%1$d apps chosen. The rest use your normal internet.</string>
-    <string name="choose_apps">Choose at least one app, or turn off Per-App on the Apps page.</string>
+    <!-- Apps -->
+    <string name="apps_title">Apps</string>
+    <string name="apps_subtitle">Decide, per app, whether its traffic goes through the VPN.</string>
+    <string name="per_app_title">Per-App mode</string>
+    <string name="per_app_on_hint">Only the apps checked below use the VPN. Apps not in this list are left on your normal internet.</string>
+    <string name="per_app_off_hint">Off: every app uses the VPN. Turn it on to choose apps.</string>
+    <string name="apps_chosen">%1$d apps chosen</string>
+    <string name="choose_apps">Choose at least one app, or switch to Full VPN.</string>
     <string name="search_apps">Search apps</string>
+    <string name="loading_apps">Loading apps…</string>
     <string name="applies_next">Applies when you reconnect</string>
 
+    <!-- Logs -->
+    <string name="logs_title">Logs</string>
+    <string name="logs_subtitle">What sing-box and Xray wrote during the last connection. Send it along when something doesn\'t work.</string>
+    <string name="log_empty">No log yet. Connect once to see it.</string>
+    <string name="copy">Copy</string>
+    <string name="share">Share</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_subtitle">Changes apply when you reconnect.</string>
+    <string name="appearance">Appearance</string>
+    <string name="connection">Connection</string>
     <string name="bypass_iran">Iranian sites skip the VPN</string>
     <string name="bypass_iran_hint">.ir sites and Iranian addresses open directly, as on Windows.</string>
-    <string name="language">Language</string>
+    <string name="language">App language</string>
+    <string name="language_hint">Persian reads right to left. Logs and server names stay as they are.</string>
     <string name="language_system">Phone\'s language</string>
     <string name="language_fa" translatable="false">فارسی</string>
     <string name="language_en" translatable="false">English</string>
-    <string name="log">Log</string>
-    <string name="log_hint">What sing-box wrote during the last connection</string>
-    <string name="log_empty">No log yet. Connect once to see it.</string>
-    <string name="copy">Copy</string>
-    <string name="close">Close</string>
     <string name="about">About</string>
     <string name="version">Version %1$s</string>
-    <string name="credits">Runs on sing-box (GPL-3.0-or-later). Bridge is not associated with sing-box.</string>
+    <string name="credits">Runs on sing-box (GPL-3.0-or-later) and Xray (MPL-2.0). Fonts: Geist and Vazirmatn (SIL OFL 1.1). Icons: Lucide (ISC) and Phosphor (MIT). Bridge is not associated with these projects.</string>
+    <string name="privacy_title">Privacy</string>
+    <string name="privacy_hint">Your servers and settings stay on this phone. Bridge sends nothing about you anywhere.</string>
     <string name="no_servers">Add a server first</string>
 </resources>

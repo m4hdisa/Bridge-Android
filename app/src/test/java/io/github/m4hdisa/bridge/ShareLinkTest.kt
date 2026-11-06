@@ -122,12 +122,78 @@ class ShareLinkTest {
     }
 
     @Test
-    fun linksThatNeedXrayOrAreBroken() {
+    fun linksOnlyXrayCanRun() {
+        val xhttp = ShareLink.parse("vless://$uuid@example.com:443?type=xhttp&security=reality&sni=www.google.com&pbk=KEY&sid=ab&path=%2Fx&mode=packet-up#XH")
+        assertTrue(xhttp.usesXray)
+        assertEquals("XH", xhttp.name)
+        assertEquals("vless / xhttp / reality", xhttp.kind)
+        val stream = xhttp.xray!!.getJSONObject("streamSettings")
+        assertEquals("xhttp", stream.getString("method"))
+        assertEquals("/x", stream.getJSONObject("xhttpSettings").getString("path"))
+        assertEquals("packet-up", stream.getJSONObject("xhttpSettings").getString("mode"))
+        assertEquals("KEY", stream.getJSONObject("realitySettings").getString("password"))
+
+        val encrypted = ShareLink.parse("vless://$uuid@example.com:443?encryption=mlkem768x25519plus.native.0rtt.abc")
+        assertEquals("mlkem768x25519plus.native.0rtt.abc", encrypted.xray!!.getJSONObject("settings").getString("encryption"))
+
+        val camouflage = ShareLink.parse("vless://$uuid@example.com:443?type=tcp&headerType=http&host=a.com")
+        assertEquals("http", camouflage.xray!!.getJSONObject("streamSettings").getJSONObject("rawSettings").getJSONObject("header").getString("type"))
+
+        val fragment = ShareLink.parse("vless://$uuid@example.com:443?security=tls&sni=a.com&fm=%7B%22tcp%22%3A%5B%5D%7D")
+        assertTrue(fragment.xray!!.getJSONObject("streamSettings").has("finalmask"))
+
+        // sing-box runs everything it can.
+        assertFalse(ShareLink.parse("vless://$uuid@example.com:443?type=ws&security=tls").usesXray)
+    }
+
+    @Test
+    fun xrayRunsServersByAddress() {
+        val o = ShareLink.parse("vless://$uuid@srv.example.com:443?type=xhttp&security=tls&path=%2Fx").xray!!
+        val pinned = Xray.withServerIp(o, "203.0.113.5")
+        assertEquals("203.0.113.5", pinned.getJSONObject("settings").getString("address"))
+        assertEquals("srv.example.com", pinned.getJSONObject("streamSettings").getJSONObject("tlsSettings").getString("serverName"))
+        assertEquals("srv.example.com", pinned.getJSONObject("streamSettings").getJSONObject("xhttpSettings").getString("host"))
+        assertFalse(Xray.needsRelay(pinned))
+
+        val plain = ShareLink.parse("vless://$uuid@203.0.113.6:80?type=xhttp&path=%2Fp").xray!!
+        assertTrue(Xray.needsRelay(plain))
+        val config = Xray.config(listOf(Xray.Entry(20000, pinned), Xray.Entry(20001, plain, relayPort = 20002)), "user", "secret")
+        // CI checks it with Xray itself.
+        File("build/generated-configs/xray-process.json").writeText(config.toString(2))
+        val inbounds = config.getJSONArray("inbounds")
+        assertEquals(3, inbounds.length())
+        assertEquals("password", inbounds.getJSONObject(0).getJSONObject("settings").getString("auth"))
+        assertEquals("dokodemo-door", inbounds.getJSONObject(2).getString("protocol"))
+        assertEquals("203.0.113.6", inbounds.getJSONObject(2).getJSONObject("settings").getString("address"))
+        assertEquals(20002, config.getJSONArray("outbounds").getJSONObject(1).getJSONObject("settings").getInt("port"))
+    }
+
+    @Test
+    fun linksFromConfigFiles() {
+        val xray = """
+            [{"remarks":"BPB","outbounds":[
+              {"tag":"proxy","protocol":"vless","settings":{"vnext":[{"address":"a.example.com","port":443,"users":[{"id":"$uuid","encryption":"none"}]}]},
+               "streamSettings":{"network":"ws","security":"tls","wsSettings":{"path":"/p","host":"h.example.com"},"tlsSettings":{"serverName":"h.example.com","fingerprint":"chrome"},"sockopt":{"dialerProxy":"frag"}}},
+              {"tag":"frag","protocol":"freedom","settings":{"fragment":{"packets":"tlshello","length":"10-20","interval":"1-2"}}}
+            ]}]
+        """.trimIndent()
+        val links = ShareLink.extract(xray)
+        assertEquals(1, links.size)
+        val p = ShareLink.parse(links.single())
+        assertEquals("BPB", p.name)
+        assertTrue("fragmenting needs Xray", p.usesXray)
+        assertEquals("h.example.com", p.xray!!.getJSONObject("streamSettings").getJSONObject("wsSettings").getString("host"))
+
+        val singBox = """{"outbounds":[{"type":"trojan","tag":"T","server":"t.example.com","server_port":443,"password":"pw","tls":{"enabled":true,"server_name":"t.example.com"}}]}"""
+        val t = ShareLink.parse(ShareLink.extract(singBox).single())
+        assertEquals("trojan", t.outbound.getString("type"))
+        assertEquals("T", t.name)
+    }
+
+    @Test
+    fun linksThatAreBroken() {
         val bad = listOf(
-            "vless://$uuid@example.com:443?type=xhttp&security=tls" to "Xray",
-            "vless://$uuid@example.com:443?encryption=mlkem768x25519plus.native.0rtt.abc" to "Xray",
-            "vless://$uuid@example.com:443?type=tcp&headerType=http" to "Xray",
-            "vless://$uuid@example.com:443?security=tls&fm=%7B%7D" to "Xray",
+            "vless://$uuid@example.com:443?type=quic" to "not supported",
             "wireguard://abc@example.com:51820" to "not supported",
             "vmess://not-json" to "VMess",
             "vless://example.com:443" to "UUID",

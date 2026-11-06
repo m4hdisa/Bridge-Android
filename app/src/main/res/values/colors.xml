@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The logo blue, the same as the Windows app's primary color. -->
-    <color name="brand">#023EE8</color>
-    <color name="good">#1E8E3E</color>
-    <color name="fair">#B26A00</color>
-    <color name="bad">#C5221F</color>
+    <!-- The Windows app's colors (src/renderer/src/styles.css); ui/Theme.kt has the full set. -->
+    <color name="background">#0A0A0A</color>
+    <!-- The logo blue. -->
+    <color name="primary">#023EE8</color>
+    <!-- The logo blue, lightened for text and icons on the dark screen. -->
+    <color name="brand">#649AFF</color>
 </resources>

@@ -1,0 +1,79 @@
+package io.github.m4hdisa.bridge.ui
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.unit.dp
+
+/**
+ * The icons the Windows app uses: Lucide (ISC License, lucide.dev) and, for the navigation bar,
+ * Phosphor (MIT License, phosphoricons.com). Generated from their packages; don't edit by hand.
+ */
+object Icons {
+    val Power: ImageVector by lazy { stroke("power", "M 12 2v 10", "M 18.4 6.6a 9 9 0 1 1 -12.77 .04") }
+    val Zap: ImageVector by lazy { stroke("zap", "M 15.914 4a 1.5 1.5 0 0 0 -2.474 -1.561l -9 9A 1.5 1.5 0 0 0 5.5 14h 4.002a .5 .5 0 0 1 .471 .666L 8.086 20a 1.5 1.5 0 0 0 2.475 1.56l 9 -9A 1.5 1.5 0 0 0 18.5 10h -3.997a .5 .5 0 0 1 -.472 -.667z") }
+    val Plus: ImageVector by lazy { stroke("plus", "M 5 12h 14", "M 12 5v 14") }
+    val RefreshCw: ImageVector by lazy { stroke("refresh-cw", "M 3 12a 9 9 0 0 1 9 -9 9.75 9.75 0 0 1 6.74 2.74L 21 8", "M 21 3v 5h -5", "M 21 12a 9 9 0 0 1 -9 9 9.75 9.75 0 0 1 -6.74 -2.74L 3 16", "M 8 16H 3v 5") }
+    val Ellipsis: ImageVector by lazy { stroke("ellipsis", "M 11 12a 1 1 0 1 0 2 0a 1 1 0 1 0 -2 0", "M 18 12a 1 1 0 1 0 2 0a 1 1 0 1 0 -2 0", "M 4 12a 1 1 0 1 0 2 0a 1 1 0 1 0 -2 0") }
+    val Link2: ImageVector by lazy { stroke("link-2", "M 9 17H 7A 5 5 0 0 1 7 7h 2", "M 15 7h 2a 5 5 0 1 1 0 10h -2", "M 8 12L 16 12") }
+    val Shield: ImageVector by lazy { stroke("shield", "M 20 13c 0 5 -3.5 7.5 -7.66 8.95a 1 1 0 0 1 -.67 -.01C 7.5 20.5 4 18 4 13V 6a 1 1 0 0 1 1 -1c 2 0 4.5 -1.2 6.24 -2.72a 1.17 1.17 0 0 1 1.52 0C 14.51 3.81 17 5 19 5a 1 1 0 0 1 1 1z") }
+    val ShieldCheck: ImageVector by lazy { stroke("shield-check", "M 20 13c 0 5 -3.5 7.5 -7.66 8.95a 1 1 0 0 1 -.67 -.01C 7.5 20.5 4 18 4 13V 6a 1 1 0 0 1 1 -1c 2 0 4.5 -1.2 6.24 -2.72a 1.17 1.17 0 0 1 1.52 0C 14.51 3.81 17 5 19 5a 1 1 0 0 1 1 1z", "m 9 12 2 2 4 -4") }
+    val ShieldAlert: ImageVector by lazy { stroke("shield-alert", "M 20 13c 0 5 -3.5 7.5 -7.66 8.95a 1 1 0 0 1 -.67 -.01C 7.5 20.5 4 18 4 13V 6a 1 1 0 0 1 1 -1c 2 0 4.5 -1.2 6.24 -2.72a 1.17 1.17 0 0 1 1.52 0C 14.51 3.81 17 5 19 5a 1 1 0 0 1 1 1z", "M 12 8v 4", "M 12 16h .01") }
+    val Check: ImageVector by lazy { stroke("check", "M 20 6 9 17l -5 -5") }
+    val CircleCheck: ImageVector by lazy { stroke("circle-check", "M 2 12a 10 10 0 1 0 20 0a 10 10 0 1 0 -20 0", "m 16 9 -5.5 5.5L 8 12") }
+    val CircleAlert: ImageVector by lazy { stroke("circle-alert", "M 2 12a 10 10 0 1 0 20 0a 10 10 0 1 0 -20 0", "M 12 8L 12 12", "M 12 16L 12.01 16") }
+    val X: ImageVector by lazy { stroke("x", "M 18 6 6 18", "m 6 6 12 12") }
+    val Copy: ImageVector by lazy { stroke("copy", "M 10 8h 10a 2 2 0 0 1 2 2v 10a 2 2 0 0 1 -2 2h -10a 2 2 0 0 1 -2 -2v -10a 2 2 0 0 1 2 -2Z", "M 4 16c -1.1 0 -2 -.9 -2 -2V 4c 0 -1.1 .9 -2 2 -2h 10c 1.1 0 2 .9 2 2") }
+    val ClipboardPaste: ImageVector by lazy { stroke("clipboard-paste", "M 11 14h 10", "M 16 4h 2a 2 2 0 0 1 2 2v 1.344", "m 17 18 4 -4 -4 -4", "M 8 4H 6a 2 2 0 0 0 -2 2v 14a 2 2 0 0 0 2 2h 12a 2 2 0 0 0 1.793 -1.113", "M 9 2h 6a 1 1 0 0 1 1 1v 2a 1 1 0 0 1 -1 1h -6a 1 1 0 0 1 -1 -1v -2a 1 1 0 0 1 1 -1Z") }
+    val ChevronRight: ImageVector by lazy { stroke("chevron-right", "m 9 18 6 -6 -6 -6") }
+    val ChevronDown: ImageVector by lazy { stroke("chevron-down", "m 6 9 6 6 6 -6") }
+    val Search: ImageVector by lazy { stroke("search", "m 21 21 -4.34 -4.34", "M 3 11a 8 8 0 1 0 16 0a 8 8 0 1 0 -16 0") }
+    val Trash2: ImageVector by lazy { stroke("trash", "M 10 11v 6", "M 14 11v 6", "M 19 6v 14a 2 2 0 0 1 -2 2H 7a 2 2 0 0 1 -2 -2V 6", "M 3 6h 18", "M 8 6V 4a 2 2 0 0 1 2 -2h 4a 2 2 0 0 1 2 2v 2") }
+    val Globe: ImageVector by lazy { stroke("globe", "M 2 12a 10 10 0 1 0 20 0a 10 10 0 1 0 -20 0", "M 12 2a 14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0 -20", "M 2 12h 20") }
+    val Wifi: ImageVector by lazy { stroke("wifi", "M 12 20h .01", "M 2 8.82a 15 15 0 0 1 20 0", "M 5 12.859a 10 10 0 0 1 14 0", "M 8.5 16.429a 5 5 0 0 1 7 0") }
+    val Info: ImageVector by lazy { stroke("info", "M 2 12a 10 10 0 1 0 20 0a 10 10 0 1 0 -20 0", "M 12 16v -4", "M 12 8h .01") }
+    val TriangleAlert: ImageVector by lazy { stroke("triangle-alert", "m 21.73 18 -8 -14a 2 2 0 0 0 -3.48 0l -8 14A 2 2 0 0 0 4 21h 16a 2 2 0 0 0 1.73 -3", "M 12 9v 4", "M 12 17h .01") }
+    val Split: ImageVector by lazy { stroke("split", "M 16 3h 5v 5", "M 8 3H 3v 5", "M 12 22v -8.3a 4 4 0 0 0 -1.172 -2.872L 3 3", "m 15 9 6 -6") }
+    val Download: ImageVector by lazy { stroke("download", "M 12 15V 3", "M 21 15v 4a 2 2 0 0 1 -2 2H 5a 2 2 0 0 1 -2 -2v -4", "m 7 10 5 5 5 -5") }
+    val Share2: ImageVector by lazy { stroke("share-2", "M 15 5a 3 3 0 1 0 6 0a 3 3 0 1 0 -6 0", "M 3 12a 3 3 0 1 0 6 0a 3 3 0 1 0 -6 0", "M 15 19a 3 3 0 1 0 6 0a 3 3 0 1 0 -6 0", "M 8.59 13.51L 15.42 17.49", "M 15.41 6.51L 8.59 10.49") }
+    val Server: ImageVector by lazy { stroke("server", "M 4 2h 16a 2 2 0 0 1 2 2v 4a 2 2 0 0 1 -2 2h -16a 2 2 0 0 1 -2 -2v -4a 2 2 0 0 1 2 -2Z", "M 4 14h 16a 2 2 0 0 1 2 2v 4a 2 2 0 0 1 -2 2h -16a 2 2 0 0 1 -2 -2v -4a 2 2 0 0 1 2 -2Z", "M 6 6L 6.01 6", "M 6 18L 6.01 18") }
+    val ScrollText: ImageVector by lazy { stroke("scroll-text", "M 15 12h -5", "M 15 8h -5", "M 19 17V 5a 2 2 0 0 0 -2 -2H 4", "M 8 21h 12a 2 2 0 0 0 2 -2v -1a 1 1 0 0 0 -1 -1H 11a 1 1 0 0 0 -1 1v 1a 2 2 0 1 1 -4 0V 5a 2 2 0 1 0 -4 0v 2a 1 1 0 0 0 1 1h 3") }
+    val Languages: ImageVector by lazy { stroke("languages", "m 5 8 6 6", "m 4 14 6 -6 2 -3", "M 2 5h 12", "M 7 2h 1", "m 22 22 -5 -10 -5 10", "M 14 18h 6") }
+    val MapPin: ImageVector by lazy { stroke("map-pin", "M 20 10c 0 4.993 -5.539 10.193 -7.399 11.799a 1 1 0 0 1 -1.202 0C 9.539 20.193 4 14.993 4 10a 8 8 0 0 1 16 0", "M 9 10a 3 3 0 1 0 6 0a 3 3 0 1 0 -6 0") }
+    val Activity: ImageVector by lazy { stroke("activity", "M 22 12h -2.48a 2 2 0 0 0 -1.93 1.46l -2.35 8.36a .25 .25 0 0 1 -.48 0L 9.24 2.18a .25 .25 0 0 0 -.48 0l -2.35 8.36A 2 2 0 0 1 4.49 12H 2") }
+    val Cloud: ImageVector by lazy { stroke("cloud", "M 17.5 19H 9a 7 7 0 1 1 6.71 -9h 1.79a 4.5 4.5 0 1 1 0 9Z") }
+    val Waypoints: ImageVector by lazy { stroke("waypoints", "m 10.586 5.414 -5.172 5.172", "m 18.586 13.414 -5.172 5.172", "M 6 12h 12", "M 10 20a 2 2 0 1 0 4 0a 2 2 0 1 0 -4 0", "M 10 4a 2 2 0 1 0 4 0a 2 2 0 1 0 -4 0", "M 18 12a 2 2 0 1 0 4 0a 2 2 0 1 0 -4 0", "M 2 12a 2 2 0 1 0 4 0a 2 2 0 1 0 -4 0") }
+    val Ban: ImageVector by lazy { stroke("ban", "M 2 12a 10 10 0 1 0 20 0a 10 10 0 1 0 -20 0", "M 4.929 4.929 19.07 19.071") }
+    val ArrowRight: ImageVector by lazy { stroke("arrow-right", "M 5 12h 14", "m 12 5 7 7 -7 7") }
+    val Gauge: ImageVector by lazy { stroke("gauge", "m 12 14 4 -4", "M 3.34 19a 10 10 0 1 1 17.32 0") }
+    val Sparkles: ImageVector by lazy { stroke("sparkles", "M 11.017 2.814a 1 1 0 0 1 1.966 0l 1.051 5.558a 2 2 0 0 0 1.594 1.594l 5.558 1.051a 1 1 0 0 1 0 1.966l -5.558 1.051a 2 2 0 0 0 -1.594 1.594l -1.051 5.558a 1 1 0 0 1 -1.966 0l -1.051 -5.558a 2 2 0 0 0 -1.594 -1.594l -5.558 -1.051a 1 1 0 0 1 0 -1.966l 5.558 -1.051a 2 2 0 0 0 1.594 -1.594z", "M 20 2v 4", "M 22 4h -4", "M 2 20a 2 2 0 1 0 4 0a 2 2 0 1 0 -4 0") }
+    val Pencil: ImageVector by lazy { stroke("pencil", "M 21.174 6.812a 1 1 0 0 0 -3.986 -3.987L 3.842 16.174a 2 2 0 0 0 -.5 .83l -1.321 4.352a .5 .5 0 0 0 .623 .622l 4.353 -1.32a 2 2 0 0 0 .83 -.497z", "m 15 5 4 4") }
+    val KeyRound: ImageVector by lazy { stroke("key-round", "M 2.586 17.414A 2 2 0 0 0 2 18.828V 21a 1 1 0 0 0 1 1h 3a 1 1 0 0 0 1 -1v -1a 1 1 0 0 1 1 -1h 1a 1 1 0 0 0 1 -1v -1a 1 1 0 0 1 1 -1h .172a 2 2 0 0 0 1.414 -.586l .814 -.814a 6.5 6.5 0 1 0 -4 -4z", "M 16 7.5a 0.5 0.5 0 1 0 1 0a 0.5 0.5 0 1 0 -1 0") }
+    val Smartphone: ImageVector by lazy { stroke("smartphone", "M 7 2h 10a 2 2 0 0 1 2 2v 16a 2 2 0 0 1 -2 2h -10a 2 2 0 0 1 -2 -2v -16a 2 2 0 0 1 2 -2Z", "M 12 18h .01") }
+    val LoaderCircle: ImageVector by lazy { stroke("loader-circle", "M 21 12a 9 9 0 1 1 -6.219 -8.56") }
+    val SquaresFour: ImageVector by lazy { fill("SquaresFour-regular", "M 104 40H 56A 16 16 0 0 0 40 56v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 56A 16 16 0 0 0 104 40Zm 0 64H 56V 56h 48v 48Zm 96 -64H 152a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 56A 16 16 0 0 0 200 40Zm 0 64H 152V 56h 48v 48Zm -96 32H 56a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 152A 16 16 0 0 0 104 136Zm 0 64H 56V 152h 48v 48Zm 96 -64H 152a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 152A 16 16 0 0 0 200 136Zm 0 64H 152V 152h 48v 48Z") }
+    val SquaresFourFill: ImageVector by lazy { fill("SquaresFour-fill", "M 120 56v 48a 16 16 0 0 1 -16 16H 56a 16 16 0 0 1 -16 -16V 56A 16 16 0 0 1 56 40h 48A 16 16 0 0 1 120 56Zm 80 -16H 152a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 56A 16 16 0 0 0 200 40Zm -96 96H 56a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 152A 16 16 0 0 0 104 136Zm 96 0H 152a 16 16 0 0 0 -16 16v 48a 16 16 0 0 0 16 16h 48a 16 16 0 0 0 16 -16V 152A 16 16 0 0 0 200 136Z") }
+    val GlobeHemisphereWest: ImageVector by lazy { fill("GlobeHemisphereWest-regular", "M 128 24A 104 104 0 1 0 232 128 104.11 104.11 0 0 0 128 24Zm 88 104a 87.62 87.62 0 0 1 -6.4 32.94l -44.7 -27.49a 15.92 15.92 0 0 0 -6.24 -2.23l -22.82 -3.08a 16.11 16.11 0 0 0 -16 7.86h -8.72l -3.8 -7.86a 15.91 15.91 0 0 0 -11 -8.67l -8 -1.73L 96.14 104h 16.71a 16.06 16.06 0 0 0 7.73 -2l 12.25 -6.76a 16.62 16.62 0 0 0 3 -2.14l 26.91 -24.34A 15.93 15.93 0 0 0 166 49.1l -.36 -.65A 88.11 88.11 0 0 1 216 128ZM 143.31 41.34 152 56.9 125.09 81.24 112.85 88H 96.14a 16 16 0 0 0 -13.88 8l -8.73 15.23L 63.38 84.19 74.32 58.32a 87.87 87.87 0 0 1 69 -17ZM 40 128a 87.53 87.53 0 0 1 8.54 -37.8l 11.34 30.27a 16 16 0 0 0 11.62 10l 21.43 4.61L 96.74 143a 16.09 16.09 0 0 0 14.4 9h 1.48l -7.23 16.23a 16 16 0 0 0 2.86 17.37l .14 .14L 128 205.94l -1.94 10A 88.11 88.11 0 0 1 40 128Zm 102.58 86.78 1.13 -5.81a 16.09 16.09 0 0 0 -4 -13.9 1.85 1.85 0 0 1 -.14 -.14L 120 174.74 133.7 144l 22.82 3.08 45.72 28.12A 88.18 88.18 0 0 1 142.58 214.78Z") }
+    val GlobeHemisphereWestFill: ImageVector by lazy { fill("GlobeHemisphereWest-fill", "M 128 24A 104 104 0 1 0 232 128 104.11 104.11 0 0 0 128 24Zm 88 104a 87.62 87.62 0 0 1 -6.4 32.94l -44.7 -27.49a 15.92 15.92 0 0 0 -6.24 -2.23l -22.82 -3.08a 16.11 16.11 0 0 0 -16 7.86h -8.72l -3.8 -7.86a 15.91 15.91 0 0 0 -11 -8.67l -8 -1.73L 96.14 104h 16.71a 16.06 16.06 0 0 0 7.73 -2l 12.25 -6.76a 16.62 16.62 0 0 0 3 -2.14l 26.91 -24.34A 15.93 15.93 0 0 0 166 49.1l -.36 -.65A 88.11 88.11 0 0 1 216 128ZM 40 128a 87.53 87.53 0 0 1 8.54 -37.8l 11.34 30.27a 16 16 0 0 0 11.62 10l 21.43 4.61L 96.74 143a 16.09 16.09 0 0 0 14.4 9h 1.48l -7.23 16.23a 16 16 0 0 0 2.86 17.37l .14 .14L 128 205.94l -1.94 10A 88.11 88.11 0 0 1 40 128Z") }
+    val AppWindow: ImageVector by lazy { fill("AppWindow-regular", "M 216 40H 40A 16 16 0 0 0 24 56V 200a 16 16 0 0 0 16 16H 216a 16 16 0 0 0 16 -16V 56A 16 16 0 0 0 216 40Zm 0 160H 40V 56H 216V 200ZM 80 84A 12 12 0 1 1 68 72 12 12 0 0 1 80 84Zm 40 0a 12 12 0 1 1 -12 -12A 12 12 0 0 1 120 84Z") }
+    val AppWindowFill: ImageVector by lazy { fill("AppWindow-fill", "M 216 40H 40A 16 16 0 0 0 24 56V 200a 16 16 0 0 0 16 16H 216a 16 16 0 0 0 16 -16V 56A 16 16 0 0 0 216 40ZM 68 96A 12 12 0 1 1 80 84 12 12 0 0 1 68 96Zm 40 0a 12 12 0 1 1 12 -12A 12 12 0 0 1 108 96Z") }
+    val Scroll: ImageVector by lazy { fill("Scroll-regular", "M 96 104a 8 8 0 0 1 8 -8h 64a 8 8 0 0 1 0 16H 104A 8 8 0 0 1 96 104Zm 8 40h 64a 8 8 0 0 0 0 -16H 104a 8 8 0 0 0 0 16Zm 128 48a 32 32 0 0 1 -32 32H 88a 32 32 0 0 1 -32 -32V 64a 16 16 0 0 0 -32 0c 0 5.74 4.83 9.62 4.88 9.66h 0A 8 8 0 0 1 24 88a 7.89 7.89 0 0 1 -4.79 -1.61h 0C 18.05 85.54 8 77.61 8 64A 32 32 0 0 1 40 32H 176a 32 32 0 0 1 32 32V 168h 8a 8 8 0 0 1 4.8 1.6C 222 170.46 232 178.39 232 192ZM 96.26 173.48A 8.07 8.07 0 0 1 104 168h 88V 64a 16 16 0 0 0 -16 -16H 67.69A 31.71 31.71 0 0 1 72 64V 192a 16 16 0 0 0 32 0c 0 -5.74 -4.83 -9.62 -4.88 -9.66A 7.82 7.82 0 0 1 96.26 173.48ZM 216 192a 12.58 12.58 0 0 0 -3.23 -8h -94a 26.92 26.92 0 0 1 1.21 8 31.82 31.82 0 0 1 -4.29 16H 200A 16 16 0 0 0 216 192Z") }
+    val ScrollFill: ImageVector by lazy { fill("Scroll-fill", "M 220.8 169.6A 8 8 0 0 0 216 168h -8V 64a 32 32 0 0 0 -32 -32H 40A 32 32 0 0 0 8 64C 8 77.61 18.05 85.54 19.2 86.4h 0A 7.89 7.89 0 0 0 24 88a 8 8 0 0 0 4.87 -14.33h 0C 28.83 73.62 24 69.74 24 64a 16 16 0 0 1 32 0V 192a 32 32 0 0 0 32 32H 200a 32 32 0 0 0 32 -32C 232 178.39 222 170.46 220.8 169.6ZM 104 96h 64a 8 8 0 0 1 0 16H 104a 8 8 0 0 1 0 -16Zm -8 40a 8 8 0 0 1 8 -8h 64a 8 8 0 0 1 0 16H 104A 8 8 0 0 1 96 136Zm 104 72H 107.71A 31.82 31.82 0 0 0 112 192a 26.92 26.92 0 0 0 -1.21 -8h 102a 12.58 12.58 0 0 1 3.23 8A 16 16 0 0 1 200 208Z") }
+    val GearSix: ImageVector by lazy { fill("GearSix-regular", "M 128 80a 48 48 0 1 0 48 48A 48.05 48.05 0 0 0 128 80Zm 0 80a 32 32 0 1 1 32 -32A 32 32 0 0 1 128 160Zm 109.94 -52.79a 8 8 0 0 0 -3.89 -5.4l -29.83 -17 -.12 -33.62a 8 8 0 0 0 -2.83 -6.08 111.91 111.91 0 0 0 -36.72 -20.67 8 8 0 0 0 -6.46 .59L 128 41.85 97.88 25a 8 8 0 0 0 -6.47 -.6A 112.1 112.1 0 0 0 54.73 45.15a 8 8 0 0 0 -2.83 6.07l -.15 33.65 -29.83 17a 8 8 0 0 0 -3.89 5.4 106.47 106.47 0 0 0 0 41.56 8 8 0 0 0 3.89 5.4l 29.83 17 .12 33.62a 8 8 0 0 0 2.83 6.08 111.91 111.91 0 0 0 36.72 20.67 8 8 0 0 0 6.46 -.59L 128 214.15 158.12 231a 7.91 7.91 0 0 0 3.9 1 8.09 8.09 0 0 0 2.57 -.42 112.1 112.1 0 0 0 36.68 -20.73 8 8 0 0 0 2.83 -6.07l .15 -33.65 29.83 -17a 8 8 0 0 0 3.89 -5.4A 106.47 106.47 0 0 0 237.94 107.21Zm -15 34.91 -28.57 16.25a 8 8 0 0 0 -3 3c -.58 1 -1.19 2.06 -1.81 3.06a 7.94 7.94 0 0 0 -1.22 4.21l -.15 32.25a 95.89 95.89 0 0 1 -25.37 14.3L 134 199.13a 8 8 0 0 0 -3.91 -1h -.19c -1.21 0 -2.43 0 -3.64 0a 8.08 8.08 0 0 0 -4.1 1l -28.84 16.1A 96 96 0 0 1 67.88 201l -.11 -32.2a 8 8 0 0 0 -1.22 -4.22c -.62 -1 -1.23 -2 -1.8 -3.06a 8.09 8.09 0 0 0 -3 -3.06l -28.6 -16.29a 90.49 90.49 0 0 1 0 -28.26L 61.67 97.63a 8 8 0 0 0 3 -3c .58 -1 1.19 -2.06 1.81 -3.06a 7.94 7.94 0 0 0 1.22 -4.21l .15 -32.25a 95.89 95.89 0 0 1 25.37 -14.3L 122 56.87a 8 8 0 0 0 4.1 1c 1.21 0 2.43 0 3.64 0a 8.08 8.08 0 0 0 4.1 -1l 28.84 -16.1A 96 96 0 0 1 188.12 55l .11 32.2a 8 8 0 0 0 1.22 4.22c .62 1 1.23 2 1.8 3.06a 8.09 8.09 0 0 0 3 3.06l 28.6 16.29A 90.49 90.49 0 0 1 222.9 142.12Z") }
+    val GearSixFill: ImageVector by lazy { fill("GearSix-fill", "M 237.94 107.21a 8 8 0 0 0 -3.89 -5.4l -29.83 -17 -.12 -33.62a 8 8 0 0 0 -2.83 -6.08 111.91 111.91 0 0 0 -36.72 -20.67 8 8 0 0 0 -6.46 .59L 128 41.85 97.88 25a 8 8 0 0 0 -6.47 -.6A 111.92 111.92 0 0 0 54.73 45.15a 8 8 0 0 0 -2.83 6.07l -.15 33.65 -29.83 17a 8 8 0 0 0 -3.89 5.4 106.47 106.47 0 0 0 0 41.56 8 8 0 0 0 3.89 5.4l 29.83 17 .12 33.63a 8 8 0 0 0 2.83 6.08 111.91 111.91 0 0 0 36.72 20.67 8 8 0 0 0 6.46 -.59L 128 214.15 158.12 231a 7.91 7.91 0 0 0 3.9 1 8.09 8.09 0 0 0 2.57 -.42 112.1 112.1 0 0 0 36.68 -20.73 8 8 0 0 0 2.83 -6.07l .15 -33.65 29.83 -17a 8 8 0 0 0 3.89 -5.4A 106.47 106.47 0 0 0 237.94 107.21ZM 128 168a 40 40 0 1 1 40 -40A 40 40 0 0 1 128 168Z") }
+
+    /** Lucide: drawn with a 2-unit line on a 24-unit grid. */
+    private fun stroke(name: String, vararg paths: String): ImageVector = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
+        for (d in paths) {
+            addPath(addPathNodes(d), stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round)
+        }
+    }.build()
+
+    /** Phosphor: filled shapes on a 256-unit grid. */
+    private fun fill(name: String, vararg paths: String): ImageVector = ImageVector.Builder(name, 24.dp, 24.dp, 256f, 256f).apply {
+        for (d in paths) addPath(addPathNodes(d), fill = SolidColor(Color.Black))
+    }.build()
+}

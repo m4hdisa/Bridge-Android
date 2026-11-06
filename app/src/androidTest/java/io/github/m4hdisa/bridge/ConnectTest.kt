@@ -2,12 +2,15 @@ package io.github.m4hdisa.bridge
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -17,6 +20,7 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.net.URL
 
 /**
@@ -118,15 +122,50 @@ class ConnectTest {
         assertTrue(page.contains("Example Domain"))
     }
 
+    /** A server only Xray can run: VLESS over xhttp with REALITY, the way many panels hand them out. */
+    @Test
+    fun connectsThroughXray() {
+        val xrayPort = args.getString("xrayPort")?.takeIf { it.isNotEmpty() } ?: return
+        val publicKey = args.getString("realityKey")?.takeIf { it.isNotEmpty() } ?: return
+        val link = "vless://$uuid@10.0.2.2:$xrayPort?type=xhttp&path=%2Fbridge&security=reality&sni=www.google.com&fp=chrome&pbk=$publicKey#XrayLive"
+        assertTrue("an xhttp link runs on Xray", ShareLink.parse(link).usesXray)
+        val store = Store(context)
+        store.addLinks(listOf(link))
+        store.selected = store.servers.single().id
+        store.perApp = true
+        store.includeSelf = true
+        startVpn()
+        val session = VpnState.session!!
+        val page = retrying(5) { URL("https://example.com/").readText() }
+        assertTrue("example.com through Xray", page.contains("Example Domain"))
+        assertTrue("Clash API measures the Xray server", Clash.delay(session.clash, "proxy", 8_000) > 0)
+    }
+
     @Test
     fun everyPageOpens() {
-        Store(context).addLinks(listOf(live, dead))
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            for (page in listOf(R.id.nav_servers, R.id.nav_apps, R.id.nav_settings, R.id.nav_home)) {
-                scenario.onActivity { it.findViewById<BottomNavigationView>(R.id.nav).selectedItemId = page }
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                scenario.onActivity { assertEquals(page, it.findViewById<BottomNavigationView>(R.id.nav).selectedItemId) }
+        val store = Store(context)
+        store.addLinks(listOf(live, dead))
+        store.perApp = true
+        val shots = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+        for (language in listOf("en", "fa")) {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language))
+            }
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                for (screen in Screen.entries) {
+                    scenario.onActivity { it.show(screen) }
+                    InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+                    Thread.sleep(700)
+                    scenario.onActivity { activity ->
+                        val view = activity.window.decorView
+                        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                        view.draw(Canvas(bitmap))
+                        File(shots, "$language-${screen.name.lowercase()}.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        assertEquals(screen, activity.shown)
+                    }
+                }
             }
         }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList()) }
     }
 }
