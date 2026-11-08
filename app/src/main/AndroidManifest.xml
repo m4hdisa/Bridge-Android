@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Asks Android to install a new version of Bridge from GitHub; Android still asks the user. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Only apps with a launcher icon are listed, so no permission to see every package is needed. -->
     <queries>
@@ -55,6 +57,17 @@
                 <data android:scheme="tuic" />
             </intent-filter>
         </activity>
+
+        <!-- Hands a downloaded update to Android's installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_paths" />
+        </provider>
 
         <!-- Keeps the language chosen in Bridge on Android 12 and older, which have no per-app language setting. -->
         <service

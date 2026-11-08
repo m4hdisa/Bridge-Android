@@ -74,6 +74,7 @@ import io.github.m4hdisa.bridge.ui.LogsPage
 import io.github.m4hdisa.bridge.ui.PublicConfigsDialog
 import io.github.m4hdisa.bridge.ui.ServersPage
 import io.github.m4hdisa.bridge.ui.SettingsPage
+import io.github.m4hdisa.bridge.ui.UpdateSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -133,6 +134,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             handleIncoming(intent)
             model.updateSubscriptions(onlyStale = true)
+            model.checkForUpdate()
         }
     }
 
@@ -238,6 +240,7 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
             AddServersSheetContent(model, onDone = { addSheet = false }, onEnter = { enterDialog = true }, onPublic = { publicDialog = true }, onScan = onScan)
         }
     }
+    if (model.updateSheet) UpdateSheet(model)
     if (enterDialog) {
         EnterLinkDialog(onAdd = {
             enterDialog = false

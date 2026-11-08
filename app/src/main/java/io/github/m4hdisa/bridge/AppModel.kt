@@ -47,6 +47,10 @@ data class Health(
     enum class State { Idle, Checking, Ok, Failed }
 }
 
+/** How often Bridge looks for an update by itself, and how long "Later" lasts. */
+private const val UPDATE_CHECK_EVERY = 6 * 60 * 60 * 1000L
+private const val UPDATE_ASK_AGAIN = 3 * 24 * 60 * 60 * 1000L
+
 /**
  * Everything the screens show and do. Kept by the activity; the VPN itself runs in
  * BridgeVpnService and reports through VpnState.
@@ -130,6 +134,17 @@ class AppModel(context: Context) {
     private var pendingStart = false
     private var healthRound = 0
 
+    var update by mutableStateOf<UpdateState>(UpdateState.None)
+        private set
+    var updateSheet by mutableStateOf(false)
+        private set
+    var checkingUpdate by mutableStateOf(false)
+        private set
+    var updateNeedsPermission by mutableStateOf(false)
+        private set
+    private val updater = Updater(app)
+    private var updateRun: Any? = null
+
     private val stateListener: () -> Unit = { onVpnState() }
 
     init {
@@ -157,6 +172,96 @@ class AppModel(context: Context) {
 
     fun messageShown(m: Message) {
         if (message?.id == m.id) message = null
+    }
+
+    // ---------- updates ----------
+
+    /** Looks on GitHub for a newer version. On its own it does so at most every few hours and only offers it; `asked` is the Settings button. */
+    fun checkForUpdate(asked: Boolean = false) {
+        if (checkingUpdate || update is UpdateState.Downloading) return
+        val now = System.currentTimeMillis()
+        if (!asked && now - store.lastUpdateCheck < UPDATE_CHECK_EVERY) return
+        val session = VpnState.session?.takeIf { running }
+        checkingUpdate = true
+        work.execute {
+            val found = runCatching { updater.latest(session?.proxy) }
+            ui {
+                checkingUpdate = false
+                found.onSuccess { info ->
+                    store.lastUpdateCheck = now
+                    if (info == null) {
+                        update = UpdateState.None
+                        if (asked) say(R.string.update_latest)
+                    } else if ((update as? UpdateState.Ready)?.info?.version != info.version) {
+                        update = UpdateState.Available(info)
+                        val postponed = store.postponedUpdate == info.version && now - store.postponedAt < UPDATE_ASK_AGAIN
+                        if (asked || !postponed) updateSheet = true
+                    } else if (asked) {
+                        updateSheet = true
+                    }
+                }.onFailure { if (asked) say(R.string.update_check_failed) }
+            }
+        }
+    }
+
+    /** The Settings row: shows what's waiting, or looks for it. */
+    fun openUpdate() {
+        if (update.info != null) updateSheet = true else checkForUpdate(asked = true)
+    }
+
+    fun closeUpdateSheet() {
+        // Swiping it away while there's only an offer means the same as "Later".
+        if (update is UpdateState.Available) postponeUpdate() else updateSheet = false
+    }
+
+    fun postponeUpdate() {
+        update.info?.let {
+            store.postponedUpdate = it.version
+            store.postponedAt = System.currentTimeMillis()
+        }
+        updateSheet = false
+    }
+
+    fun downloadUpdate() {
+        val info = update.info ?: return
+        if (update is UpdateState.Downloading) return
+        val run = Any()
+        updateRun = run
+        updateNeedsPermission = false
+        update = UpdateState.Downloading(info, 0f)
+        val proxy = VpnState.session?.takeIf { running }?.proxy
+        work.execute {
+            var shown = -1
+            val result = runCatching {
+                updater.download(info, proxy, { updateRun === run }) { done, total ->
+                    val percent = if (total > 0) (done * 100 / total).toInt() else 0
+                    if (percent != shown) {
+                        shown = percent
+                        ui { if (updateRun === run) update = UpdateState.Downloading(info, percent / 100f) }
+                    }
+                }
+            }
+            ui {
+                if (updateRun === run) {
+                    result.onSuccess { file ->
+                        update = UpdateState.Ready(info, file)
+                        updateSheet = true
+                        installUpdate()
+                    }.onFailure { update = UpdateState.Failed(info, it is UpdateRejected) }
+                }
+            }
+        }
+    }
+
+    fun cancelUpdate() {
+        val info = update.info ?: return
+        updateRun = null
+        update = UpdateState.Available(info)
+    }
+
+    fun installUpdate() {
+        val ready = update as? UpdateState.Ready ?: return
+        updateNeedsPermission = !runCatching { updater.install(ready.file) }.getOrDefault(false)
     }
 
     /** Takes the failed connection's message off the dashboard. */
@@ -192,6 +297,8 @@ class AppModel(context: Context) {
         if (status == VpnState.Status.Running) {
             connectedAt = System.currentTimeMillis()
             findHome()
+            // GitHub may only be reachable now, through the VPN.
+            checkForUpdate()
             startHealthChecks()
             startTraffic()
         } else {
@@ -314,6 +421,12 @@ class AppModel(context: Context) {
                 if (round == healthRound) Thread.sleep(1_000)
             }
         }
+    }
+
+    /** For PageShots only: the sheet for a new version. */
+    internal fun pretendUpdate(info: UpdateInfo) {
+        update = UpdateState.Available(info)
+        updateSheet = true
     }
 
     /** For PageShots only: how a working connection looks, without a VPN. */

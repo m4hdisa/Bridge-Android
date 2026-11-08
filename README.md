@@ -11,6 +11,7 @@ The Android version of [Bridge](https://github.com/m4hdisa/Bridge-app), in the s
 - **Auto:** picks the fastest working server and keeps checking. Switching servers while connected needs no reconnect.
 - **Full VPN** by default; **Per-App** (only the apps you choose) in Settings, done by Android itself.
 - **Iranian sites skip the VPN**, with the same lists as on Windows ([Chocolate4U/Iran-sing-box-rules](https://github.com/Chocolate4U/Iran-sing-box-rules)).
+- **Updates:** Bridge looks for a new version on GitHub by itself and offers it; it downloads when you say so, checks the file's checksum and signature, and Android asks you before installing.
 - A quick settings tile, free public configs from Bridge's daily list ([Bridge-configs](https://github.com/m4hdisa/Bridge-configs)) with a warning first, the log of every core with its errors and warnings a tap away, Persian and English.
 
 Bridge's own requests (subscriptions, measuring, Xray's and Aether's connections) stay outside the VPN. When a list is blocked, Bridge fetches it through the VPN's local proxy, which only Bridge can use (it has a random password for each connection); Xray's local ports have one too.

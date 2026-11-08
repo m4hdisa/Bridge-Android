@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -100,6 +102,11 @@ class PageShots {
             compose.onRoot().captureRoboImage(File(out, "$prefix-servers-warp.png").path)
             scenario.onActivity { App.model(it).select(store().servers.first().id) }
             shadowOf(Looper.getMainLooper()).idle()
+            val notes = "- **Dashboard:** a new look.\n- Faster updates.\n\n---\n\n<div dir=\"rtl\">\n\n- **داشبورد:** ظاهر تازه.\n- به‌روزرسانی سریع‌تر.\n\n</div>"
+            scenario.onActivity { App.model(it).pretendUpdate(UpdateInfo("0.4.5", "https://example.com/a.apk", 60_153_386, null, notes)) }
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.waitForIdle()
+            compose.onAllNodes(isRoot()).onLast().captureRoboImage(File(out, "$prefix-update.png").path)
         }
     }
 

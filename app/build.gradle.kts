@@ -18,8 +18,8 @@ android {
         // libbox.aar is built for Android 7 and up.
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.4.4"
+        versionCode = 9
+        versionName = "0.4.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

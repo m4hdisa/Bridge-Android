@@ -124,6 +124,20 @@ class Store(context: Context) {
         get() = prefs.getString("psiphonRegion", null)
         set(value) = prefs.edit().putString("psiphonRegion", value).apply()
 
+    /** When GitHub last answered about updates, in milliseconds. */
+    var lastUpdateCheck: Long
+        get() = prefs.getLong("lastUpdateCheck", 0)
+        set(value) = prefs.edit().putLong("lastUpdateCheck", value).apply()
+
+    /** The version the user chose to leave for later, and when. */
+    var postponedUpdate: String?
+        get() = prefs.getString("postponedUpdate", null)
+        set(value) = prefs.edit().putString("postponedUpdate", value).apply()
+
+    var postponedAt: Long
+        get() = prefs.getLong("postponedAt", 0)
+        set(value) = prefs.edit().putLong("postponedAt", value).apply()
+
     /** Every connection in the log, to find out why something doesn't load. */
     var detailedLog: Boolean
         get() = prefs.getBoolean("detailedLog", false)

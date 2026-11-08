@@ -252,4 +252,22 @@
     <string name="apps_every">همه‌ی برنامه‌ها</string>
     <string name="licenses">مجوزهای متن‌باز</string>
     <string name="back">بازگشت</string>
+
+    <!-- updates -->
+    <string name="update_title">نسخه‌ی جدید آماده است</string>
+    <string name="update_version">نسخه‌ی %1$s، %2$s</string>
+    <string name="update_now">به‌روزرسانی</string>
+    <string name="update_later">بعداً</string>
+    <string name="update_retry">دوباره</string>
+    <string name="update_install">نصب</string>
+    <string name="update_downloading">در حال دانلود: %1$d%%</string>
+    <string name="update_vpn_note">نصب، VPN را قطع می‌کند. بعدش دوباره وصل شوید.</string>
+    <string name="update_allow">در صفحه‌ای که باز شد به Bridge اجازه‌ی نصب بدهید، بعد برگردید و نصب را بزنید.</string>
+    <string name="update_failed">دانلود کامل نشد. اتصال خود را بررسی کنید و دوباره امتحان کنید.</string>
+    <string name="update_rejected">این فایل نسخه‌ی اصلی Bridge نیست، پس نصب نشد.</string>
+    <string name="update_check">بررسی به‌روزرسانی</string>
+    <string name="update_checking">در حال بررسی…</string>
+    <string name="update_to">به‌روزرسانی به %1$s</string>
+    <string name="update_latest">آخرین نسخه را دارید</string>
+    <string name="update_check_failed">به GitHub نرسیدیم. دوباره امتحان کنید یا اول وصل شوید.</string>
 </resources>

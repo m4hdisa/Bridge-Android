@@ -1,6 +1,8 @@
 package io.github.m4hdisa.bridge
 
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -84,6 +86,79 @@ object Net {
         ssl.startHandshake()
         if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(url.host, ssl.session)) throw IOException("the certificate is not for ${url.host}")
         return ssl
+    }
+
+    /** The caller asked a download to stop. Not a network failure, so it isn't retried. */
+    class Stopped : Exception()
+
+    private class Body(val code: Int, val headers: Map<String, String>, val input: InputStream, val close: () -> Unit)
+
+    private fun directBody(url: String, from: Long): Body {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 30_000
+        connection.instanceFollowRedirects = true
+        connection.setRequestProperty("User-Agent", USER_AGENT)
+        connection.setRequestProperty("Accept-Encoding", "identity")
+        if (from > 0) connection.setRequestProperty("Range", "bytes=$from-")
+        val code = connection.responseCode
+        val input = (if (code >= 400) connection.errorStream else connection.inputStream) ?: ByteArray(0).inputStream()
+        val headers = connection.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.joinToString(",") }
+        return Body(code, headers, input) { connection.disconnect() }
+    }
+
+    private fun proxiedBody(proxy: LocalAccess, url: String, from: Long): Body {
+        var target = URL(url)
+        repeat(6) {
+            val socket = Socket()
+            val stream = open(socket, proxy, target, 30_000)
+            val path = (target.path.ifEmpty { "/" }) + (target.query?.let { "?$it" } ?: "")
+            val range = if (from > 0) "Range: bytes=$from-\r\n" else ""
+            write(stream.getOutputStream(), "GET $path HTTP/1.1\r\nHost: ${target.host}\r\nUser-Agent: $USER_AGENT\r\nAccept-Encoding: identity\r\n${range}Connection: close\r\n\r\n")
+            val input = stream.getInputStream()
+            val code = readLine(input).split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")
+            val headers = mutableMapOf<String, String>()
+            while (true) {
+                val line = readLine(input)
+                if (line.isEmpty()) break
+                headers[line.substringBefore(':').trim().lowercase()] = line.substringAfter(':', "").trim()
+            }
+            val location = headers["location"]
+            if (code !in 300..399 || location == null) return Body(code, headers, input) { runCatching { socket.close() } }
+            runCatching { socket.close() }
+            target = URL(target, location)
+        }
+        throw IOException("too many redirects")
+    }
+
+    /** Saves `url` to `target`, carrying on from what `target` already holds; through the VPN's proxy if `proxy` is given. */
+    fun download(url: String, target: File, proxy: LocalAccess?, keepGoing: () -> Boolean, progress: (Long, Long) -> Unit) {
+        val have = if (target.exists()) target.length() else 0L
+        val body = if (proxy != null) proxiedBody(proxy, url, have) else directBody(url, have)
+        try {
+            if (body.code == 416) {
+                target.delete()
+                throw IOException("the partial download doesn't fit")
+            }
+            if (body.code !in 200..299) throw IOException("HTTP ${body.code}")
+            val resumed = body.code == 206
+            var done = if (resumed) have else 0L
+            val total = (body.headers["content-length"]?.toLongOrNull() ?: 0L) + done
+            FileOutputStream(target, resumed).use { out ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    if (!keepGoing()) throw Stopped()
+                    val n = body.input.read(buffer)
+                    if (n < 0) break
+                    out.write(buffer, 0, n)
+                    done += n
+                    progress(done, total)
+                }
+            }
+            if (total > 0 && done < total) throw IOException("the connection ended early")
+        } finally {
+            body.close()
+        }
     }
 
     private fun readResponse(input: InputStream): Page {

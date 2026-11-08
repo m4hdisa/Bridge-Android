@@ -69,6 +69,7 @@ import io.github.m4hdisa.bridge.AppModel
 import io.github.m4hdisa.bridge.BuildConfig
 import io.github.m4hdisa.bridge.InstalledApp
 import io.github.m4hdisa.bridge.R
+import io.github.m4hdisa.bridge.UpdateState
 import kotlinx.coroutines.launch
 
 // ---------- Apps ----------
@@ -360,6 +361,17 @@ fun SettingsPage(model: AppModel, onOpenApps: () -> Unit) {
                 LinkRow(Icons.Info, stringResource(R.string.version, BuildConfig.VERSION_NAME), stringResource(R.string.licenses)) { sheet = SettingsSheet.Credits }
                 HorizontalDivider(color = Bridge.border)
                 LinkRow(Icons.ShieldCheck, stringResource(R.string.privacy_title), null) { sheet = SettingsSheet.Privacy }
+                HorizontalDivider(color = Bridge.border)
+                val update = model.update
+                LinkRow(
+                    Icons.Download,
+                    update.info?.let { stringResource(R.string.update_to, it.version) } ?: stringResource(R.string.update_check),
+                    when {
+                        model.checkingUpdate -> stringResource(R.string.update_checking)
+                        update is UpdateState.Downloading -> stringResource(R.string.update_downloading, (update.done * 100).toInt())
+                        else -> null
+                    },
+                ) { model.openUpdate() }
             }
         }
     }
