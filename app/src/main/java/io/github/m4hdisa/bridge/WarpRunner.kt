@@ -46,7 +46,7 @@ class WarpRunner(private val context: Context, private val log: File) {
 
     val available get() = isAvailable(context)
 
-    private class Won(val method: Warp.Method, val port: Int, val process: Process, val psiphonPort: Int?)
+    private class Won(val method: Warp.Method, val port: Int, val process: Process, val psiphonPort: Int?, val gateway: String?)
 
     private class Lost(val method: Warp.Method, val reason: String)
 
@@ -59,7 +59,21 @@ class WarpRunner(private val context: Context, private val log: File) {
         dir.mkdirs()
         ensureAccount(progress)
         val psiphon = choice == Warp.Choice.Psiphon && psiphonBin.exists()
-        val won = race(Warp.methods(choice), choice == Warp.Choice.Foreign, psiphon, region, progress)
+        val methods = Warp.methods(choice)
+        // The way and gateway that worked last time go first, alone and without a scan: that
+        // takes seconds. Only if they don't work any more is every way tried.
+        val last = lastWay()?.takeIf { (method, _) -> method in methods && (choice != Warp.Choice.Foreign || method.twoHops) }
+        val won = last?.let { (method, gateway) ->
+            note("Free WARP: trying ${method.label} on $gateway, which worked last time")
+            try {
+                race(listOf(method), false, psiphon, region, progress, gateway, QUICK_MS)
+            } catch (e: WarpException) {
+                note("Free WARP: it doesn't work now; looking for another way")
+                File(dir, LAST_WAY_FILE).delete()
+                null
+            }
+        } ?: race(methods, choice == Warp.Choice.Foreign, psiphon, region, progress)
+        won.gateway?.let { gateway -> runCatching { File(dir, LAST_WAY_FILE).writeText("${won.method.name} $gateway") } }
         winner = won.process
         Thread {
             runCatching { won.process.waitFor() }
@@ -114,6 +128,21 @@ class WarpRunner(private val context: Context, private val log: File) {
         }
     }
 
+    /** The method and gateway that worked last time, if they are still a WARP method and gateway. */
+    private fun lastWay(): Pair<Warp.Method, String>? {
+        val parts = runCatching { File(dir, LAST_WAY_FILE).readText().trim().split(' ') }.getOrNull() ?: return null
+        val method = Warp.Method.entries.firstOrNull { it.name == parts.getOrNull(0) } ?: return null
+        val gateway = parts.getOrNull(1)?.takeIf { Warp.isGateway(it) } ?: return null
+        return method to gateway
+    }
+
+    /** Makes the WARP account ahead of time, when Free WARP is chosen, so connecting needn't wait for it. */
+    fun prepareAccount() {
+        if (!available) return
+        dir.mkdirs()
+        runCatching { ensureAccount {} }
+    }
+
     /**
      * Makes the WARP account once. Iran's firewall often resets the TLS handshake to Cloudflare's
      * sign-up service; a fragmented handshake gets through on many networks. If nothing does, a
@@ -124,6 +153,12 @@ class WarpRunner(private val context: Context, private val log: File) {
         val identity = File(dir, Warp.IDENTITY_FILE)
         if (identity.exists()) return
         progress(R.string.progress_warp_account)
+        // One at a time: an account made ahead of time and a connect must not both sign up.
+        synchronized(ACCOUNT_LOCK) { makeAccount(identity) }
+    }
+
+    private fun makeAccount(identity: File) {
+        if (identity.exists()) return
         note("Free WARP: creating a WARP account (first use only)")
         note("Free WARP: creating the account directly, with TLS fragment")
         runToEnd(Warp.registerArgs(config, listOf("--fragment")), REGISTER_MS)
@@ -159,25 +194,36 @@ class WarpRunner(private val context: Context, private val log: File) {
      * Runs the methods at once, each on its own port. The first that works wins; with a foreign
      * exit wanted, one with two hops gets a minute longer, since its exit is outside Iran.
      */
-    private fun race(methods: List<Warp.Method>, foreign: Boolean, psiphon: Boolean, region: String?, progress: (Int) -> Unit): Won {
+    private fun race(
+        methods: List<Warp.Method>,
+        foreign: Boolean,
+        psiphon: Boolean,
+        region: String?,
+        progress: (Int) -> Unit,
+        peer: String? = null,
+        timeoutMs: Long = ATTEMPT_MS,
+    ): Won {
         val results = LinkedBlockingQueue<Any>()
-        note("Free WARP: looking for a way through (${methods.joinToString { it.label }})")
-        progress(R.string.progress_warp_search)
+        if (peer == null) note("Free WARP: looking for a way through (${methods.joinToString { it.label }})")
+        progress(if (peer != null) R.string.progress_starting else R.string.progress_warp_search)
         val state = File(dir, STATE_FILE)
         val missedAt = runCatching { state.readText().trim().toLong() }.getOrDefault(0L)
         val waitForTwoHops = foreign && System.currentTimeMillis() - missedAt >= TWO_HOPS_RETRY_MS
         for (method in methods) {
             val port = freePort()
             val psiphonPort = if (psiphon) freePort() else null
-            val args = Warp.args(method, port, config, psiphonPort?.let { Warp.Psiphon(psiphonBin.path, it, region) })
+            val args = Warp.args(method, port, config, psiphonPort?.let { Warp.Psiphon(psiphonBin.path, it, region) }, peer)
             var won = false
             var refused = 0
+            var gateway: String? = null
             val process = launch(args, "warp ${method.name.lowercase()}") { process, text ->
                 if (won) {
                     if (exit == null) exit = Warp.exitCountry(text)
                     return@launch
                 }
                 Warp.exitCountry(text)?.let { exit = it }
+                // The first gateway is the outer hop with two hops, the one to try first next time.
+                if (gateway == null) gateway = Warp.gateway(text)
                 if (Warp.EXIT_REFUSED.containsMatchIn(text) && ++refused >= Warp.MAX_EXIT_REFUSED) {
                     process.destroy()
                     results.offer(Lost(method, "Cloudflare gave it an Iranian exit $refused times"))
@@ -186,7 +232,7 @@ class WarpRunner(private val context: Context, private val log: File) {
                     results.offer(Lost(method, "this network has no IPv6"))
                 } else if (Warp.ready(text, port)) {
                     won = true
-                    results.offer(Won(method, port, process, psiphonPort))
+                    results.offer(Won(method, port, process, psiphonPort, gateway ?: peer))
                 }
             }
             Thread {
@@ -198,7 +244,7 @@ class WarpRunner(private val context: Context, private val log: File) {
         var pending = methods.size
         var fallback: Won? = null
         var waitUntil = Long.MAX_VALUE
-        val deadline = System.currentTimeMillis() + ATTEMPT_MS
+        val deadline = System.currentTimeMillis() + timeoutMs
         val reasons = mutableListOf<String>()
         fun finish(w: Won): Won {
             for (p in processes) if (p !== w.process) p.destroy()
@@ -310,6 +356,9 @@ class WarpRunner(private val context: Context, private val log: File) {
     companion object {
         private const val TAG = "Bridge"
         private const val STATE_FILE = "bridge-warp-state"
+        private const val LAST_WAY_FILE = "bridge-warp-last"
+        private const val QUICK_MS = 20_000L
+        private val ACCOUNT_LOCK = Any()
         private const val TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
         private const val ATTEMPT_MS = 75_000L
         private const val REGISTER_MS = 90_000L

@@ -81,6 +81,8 @@ class AppModel(context: Context) {
         private set
     var fakeIp by mutableStateOf(store.fakeIp)
         private set
+    var detailedLog by mutableStateOf(store.detailedLog)
+        private set
     var warpChoice by mutableStateOf(store.warpChoice)
         private set
     var psiphonRegion by mutableStateOf(store.psiphonRegion)
@@ -380,6 +382,8 @@ class AppModel(context: Context) {
     fun select(id: String) {
         store.selected = id
         selected = id
+        // The WARP account is made now, so connecting needn't wait for it.
+        if (id == Warp.ID && warpAvailable) work.execute { WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).prepareAccount() }
         val session = VpnState.session
         if (session != null && running) {
             val tag = if (id == AUTO) AUTO.takeIf { session.tags.size > 1 } else session.tags[id]
@@ -578,6 +582,12 @@ class AppModel(context: Context) {
     /** Updates every subscription and then tests every server: the dashboard's refresh. */
     fun refreshAll() {
         updateSubscriptions(onlyStale = false) { measure() }
+    }
+
+    fun changeDetailedLog(on: Boolean) {
+        store.detailedLog = on
+        detailedLog = on
+        noteReconnect()
     }
 
     fun changeFakeIp(on: Boolean) {

@@ -30,6 +30,8 @@ data class BoxInput(
     val fakeIp: Boolean = true,
     /** sing-box's cache file, which keeps the made-up answers across reconnects. */
     val cachePath: String? = null,
+    /** "info", or "debug" for the detailed log. */
+    val logLevel: String = "info",
 )
 
 /** The config, and each server's outbound tag in it. */
@@ -142,7 +144,9 @@ object BoxConfig {
             JSONObject()
                 .put("type", "tun")
                 .put("tag", "tun-in")
-                .put("address", JSONArray().put("172.19.0.1/30"))
+                // IPv6 too, as on Windows: on networks with IPv6 (Hamrah-e Aval and others) the
+                // phone's IPv6 traffic then comes into the VPN as well instead of having no way out.
+                .put("address", JSONArray().put("172.19.0.1/30").put("fdfe:dcba:9876::1/126"))
                 .put("mtu", 9000)
                 .put("auto_route", true)
                 .put("stack", "mixed"),
@@ -158,7 +162,7 @@ object BoxConfig {
             )
         }
 
-        val log = JSONObject().put("level", "info").put("timestamp", true)
+        val log = JSONObject().put("level", input.logLevel).put("timestamp", true)
         input.logPath?.let { log.put("output", it) }
         val config = JSONObject()
             .put("log", log)

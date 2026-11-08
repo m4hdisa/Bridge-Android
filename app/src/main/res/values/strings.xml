@@ -218,4 +218,8 @@
     <string name="sub_updated_ago">Updated %1$s</string>
     <string name="not_answering">Connected, but the server isn\'t answering</string>
     <string name="configs_count">%1$d configs</string>
+
+    <!-- 0.4.1 -->
+    <string name="detailed_log">Detailed log</string>
+    <string name="detailed_log_hint">Every connection goes in Logs, to find out why something doesn\'t load. Turn it off afterwards: it slows the phone a little.</string>
 </resources>

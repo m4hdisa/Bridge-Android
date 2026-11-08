@@ -319,7 +319,8 @@ object Xray {
         }
         // Xray writes its log to its output, which Bridge copies into the connection log.
         return JSONObject()
-            .put("log", JSONObject().put("loglevel", logLevel).put("access", "none"))
+            // At "info" (the detailed log) every connection is written too.
+            .put("log", JSONObject().put("loglevel", logLevel).put("access", if (logLevel == "info" || logLevel == "debug") "" else "none"))
             .put("inbounds", inbounds)
             .put("outbounds", outbounds)
             .put("routing", JSONObject().put("rules", rules))

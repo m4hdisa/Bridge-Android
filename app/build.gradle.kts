@@ -113,6 +113,8 @@ dependencies {
     // QR codes: ZXing (Apache-2.0) draws them, and its Android screen reads them with the camera.
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0") { isTransitive = false }
+    // Country flags: the Windows app's SVGs (country-flag-icons, MIT) in assets/flags, drawn with AndroidSVG (Apache-2.0).
+    implementation("com.caverock:androidsvg-aar:1.4")
 
     testImplementation("junit:junit:4.13.2")
     // Android's org.json only exists on a device; unit tests run on the build machine.

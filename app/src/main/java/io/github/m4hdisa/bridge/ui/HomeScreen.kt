@@ -230,7 +230,7 @@ private fun ConnectionPanel(model: AppModel) {
                     if (warp) {
                         Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
                     } else {
-                        Text(flag(country), style = MaterialTheme.typography.titleLarge)
+                        FlagIcon(country, width = 26.dp)
                     }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
@@ -325,29 +325,57 @@ fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?,
     val from = home?.let { WorldData.PLACES[it] }
     val to = exitAt ?: exitCountry?.let { WorldData.PLACES[it] }
     val pulse by rememberInfiniteTransition(label = "map").animateFloat(0f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Restart), label = "pulse")
-    val rows = WorldData.LAND.size
+    val cols = WorldData.COLS.toFloat()
+    val rows = WorldData.LAND.size.toFloat()
     val land = Bridge.mutedForeground.copy(alpha = 0.28f)
     val homeColor = Bridge.foreground
     val exitColor = Bridge.success
     val line = Bridge.brand
     val hole = Bridge.card
-    Box(modifier) {
-        Canvas(Modifier.fillMaxWidth().aspectRatio(WorldData.COLS.toFloat() / rows)) {
-            val cell = size.width / WorldData.COLS
-            val dot = cell * 0.32f
-            for ((r, hex) in WorldData.LAND.withIndex()) {
-                for ((i, ch) in hex.withIndex()) {
-                    val bits = ch.digitToInt(16)
-                    for (b in 0 until 4) {
-                        if (bits and (8 shr b) == 0) continue
-                        drawCircle(land, dot, Offset((i * 4 + b + 0.5f) * cell, (r + 0.5f) * cell))
-                    }
-                }
+    // Every land dot's middle, in map units (one unit a dot), worked out once.
+    val dots = remember {
+        val list = ArrayList<Offset>()
+        for ((r, hex) in WorldData.LAND.withIndex()) {
+            for ((i, ch) in hex.withIndex()) {
+                val bits = ch.digitToInt(16)
+                for (b in 0 until 4) if (bits and (8 shr b) != 0) list += Offset(i * 4 + b + 0.5f, r + 0.5f)
             }
-            fun point(at: Pair<Double, Double>) = Offset(
-                ((at.second + 180) / WorldData.STEP).toFloat() * cell,
-                ((WorldData.TOP - at.first) / WorldData.STEP).toFloat().coerceIn(0f, rows.toFloat()) * cell,
-            )
+        }
+        list
+    }
+    fun unit(at: Pair<Double, Double>) = Offset(
+        ((at.second + 180) / WorldData.STEP).toFloat(),
+        ((WorldData.TOP - at.first) / WorldData.STEP).toFloat().coerceIn(0f, rows),
+    )
+    // Once both places are known, the map zooms in on them and brings them to the middle.
+    val target = remember(from, to) {
+        val a = from?.let { unit(it) }
+        val b = to?.let { unit(it) } ?: return@remember null
+        val left = minOf(a?.x ?: b.x, b.x)
+        val right = maxOf(a?.x ?: b.x, b.x)
+        val top = minOf(a?.y ?: b.y, b.y)
+        val bottom = maxOf(a?.y ?: b.y, b.y)
+        val zoom = minOf(cols / maxOf((right - left) * 1.8f, 34f), rows / maxOf((bottom - top) * 2.2f, 13f)).coerceIn(1f, 4f)
+        val halfW = cols / (2 * zoom)
+        val halfH = rows / (2 * zoom)
+        Triple(zoom, ((left + right) / 2).coerceIn(halfW, cols - halfW), ((top + bottom) / 2).coerceIn(halfH, rows - halfH))
+    }
+    val progress = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(target) {
+        if (target == null) progress.snapTo(0f) else progress.animateTo(1f, tween(1200, delayMillis = 300))
+    }
+    Box(modifier.clip(ItemShape)) {
+        Canvas(Modifier.fillMaxWidth().aspectRatio(cols / rows)) {
+            val t = progress.value
+            val zoom = 1f + ((target?.first ?: 1f) - 1f) * t
+            val cx = cols / 2 + ((target?.second ?: (cols / 2)) - cols / 2) * t
+            val cy = rows / 2 + ((target?.third ?: (rows / 2)) - rows / 2) * t
+            val cell = size.width / cols
+            val scale = cell * zoom
+            fun screen(u: Offset) = Offset((u.x - cx) * scale + size.width / 2, (u.y - cy) * scale + size.height / 2)
+            fun point(at: Pair<Double, Double>) = screen(unit(at))
+            // The dots stay small as the map zooms, so it reads as a closer look, not bigger dots.
+            drawPoints(dots.map { screen(it) }, androidx.compose.ui.graphics.PointMode.Points, land, strokeWidth = cell * 0.64f * (0.6f + 0.4f * zoom), cap = StrokeCap.Round)
             // The two countries, filled lightly and outlined.
             fun country(code: String?, color: Color) {
                 val shape = code?.let { WorldData.SHAPES[it] } ?: return
@@ -388,14 +416,14 @@ fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?,
         }
         // What the two marks are.
         Row(Modifier.align(Alignment.BottomStart).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (from != null) MapKey(homeColor, stringResource(R.string.map_you) + (home?.let { flag(it) }?.takeIf { it.isNotEmpty() }?.let { " $it" } ?: ""))
-            if (to != null) MapKey(exitColor, stringResource(R.string.map_exit) + (exitCountry?.let { flag(it) }?.takeIf { it.isNotEmpty() }?.let { " $it" } ?: ""))
+            if (from != null) MapKey(homeColor, stringResource(R.string.map_you), home)
+            if (to != null) MapKey(exitColor, stringResource(R.string.map_exit), exitCountry)
         }
     }
 }
 
 @Composable
-private fun MapKey(color: Color, text: String) {
+private fun MapKey(color: Color, text: String, country: String?) {
     Row(
         Modifier.clip(ControlShape).background(Bridge.card.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -403,6 +431,11 @@ private fun MapKey(color: Color, text: String) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(5.dp))
         Text(text, style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
+        // Iran's flag is never shown, so no flag at all there.
+        if (country != null && country != "IR") {
+            Spacer(Modifier.width(5.dp))
+            FlagIcon(country, width = 14.dp)
+        }
     }
 }
 
@@ -496,7 +529,7 @@ private fun ServerChoice(model: AppModel, server: io.github.m4hdisa.bridge.Serve
         on = server.id == model.selected,
         lead = {
             if (country != null) {
-                Text(flag(country), style = MaterialTheme.typography.titleMedium)
+                FlagIcon(country, width = 22.dp)
             } else {
                 Icon(Icons.Globe, null, Modifier.size(18.dp), tint = Bridge.mutedForeground)
             }

@@ -215,4 +215,8 @@
     <string name="sub_updated_ago">به‌روزرسانی: %1$s</string>
     <string name="not_answering">وصل است، ولی سرور جواب نمی‌دهد</string>
     <string name="configs_count">%1$d کانفیگ</string>
+
+    <!-- 0.4.1 -->
+    <string name="detailed_log">لاگ دقیق</string>
+    <string name="detailed_log_hint">همه‌ی اتصال‌ها در لاگ‌ها نوشته می‌شوند تا معلوم شود چرا چیزی باز نمی‌شود. بعدش خاموشش کنید: گوشی را کمی کند می‌کند.</string>
 </resources>

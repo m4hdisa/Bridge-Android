@@ -38,6 +38,9 @@ class WarpTest {
         val fakeAt = rules.indexOfFirst { it.optString("server") == "fake" }
         assertEquals(rules.size - 1, fakeAt)
         assertTrue(rules.take(fakeAt).all { it.optString("server") == "local" })
+        // IPv6 comes into the VPN too, as on Windows.
+        val tun = c.getJSONArray("inbounds").objects().first { it.getString("type") == "tun" }
+        assertEquals(listOf("172.19.0.1/30", "fdfe:dcba:9876::1/126"), (0 until tun.getJSONArray("address").length()).map { tun.getJSONArray("address").getString(it) })
         val cache = c.getJSONObject("experimental").getJSONObject("cache_file")
         assertTrue(cache.getBoolean("store_fakeip"))
         // Iran's address for blocked sites is refused before private addresses go direct.

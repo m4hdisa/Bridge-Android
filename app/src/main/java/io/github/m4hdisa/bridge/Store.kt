@@ -124,6 +124,11 @@ class Store(context: Context) {
         get() = prefs.getString("psiphonRegion", null)
         set(value) = prefs.edit().putString("psiphonRegion", value).apply()
 
+    /** Every connection in the log, to find out why something doesn't load. */
+    var detailedLog: Boolean
+        get() = prefs.getBoolean("detailedLog", false)
+        set(value) = prefs.edit().putBoolean("detailedLog", value).apply()
+
     /** For the emulator test only: Bridge's own traffic normally skips the VPN, so it can reach servers directly. */
     var includeSelf: Boolean
         get() = prefs.getBoolean("includeSelf", false)

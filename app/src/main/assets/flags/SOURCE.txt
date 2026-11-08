@@ -1,0 +1,1 @@
+country-flag-icons 1.6.20 (github.com/catamphetamine/country-flag-icons), 3x2, unmodified; Iran's is left out

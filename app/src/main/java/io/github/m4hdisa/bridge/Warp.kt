@@ -63,8 +63,10 @@ object Warp {
     class Psiphon(val bin: String, val port: Int, val region: String?)
 
     /** One attempt's command line. Every question Aether could ask has a flag here, so it never waits for input. */
-    fun args(method: Method, port: Int, configFile: String, psiphon: Psiphon? = null): List<String> = buildList {
+    fun args(method: Method, port: Int, configFile: String, psiphon: Psiphon? = null, peer: String? = null): List<String> = buildList {
         addAll(method.args)
+        // A gateway that worked last time: no scan. For two hops it is the outer one.
+        if (peer != null) addAll(listOf(if (method == Method.MIM_H2) "--mim-outer" else "--peer", peer))
         // Stop at the first gateway that passes real traffic; with two hops "verified" keeps them in separate ranges.
         add("--scan")
         add(if (method.twoHops) "verified" else "turbo")
@@ -95,6 +97,22 @@ object Warp {
 
     /** The exit country ("masque exit: 104.28.214.161, IR via FRA, ..."). */
     fun exitCountry(text: String): String? = Regex("\\bexit: \\S+, ([A-Z]{2}) via ").find(text)?.groupValues?.get(1)
+
+    /** The Cloudflare gateway Aether connects to ("[+] using cloudflare edge 162.159.198.131:443"). */
+    fun gateway(text: String): String? =
+        Regex("using cloudflare edge (\\S+:\\d+)").find(text)?.groupValues?.get(1)
+            ?: Regex("masque-in-masque ready: (\\S+:\\d+) \\(outer\\)").find(text)?.groupValues?.get(1)
+
+    /** Only Cloudflare's WARP ranges can be a gateway, so a saved one can't point anywhere else. */
+    fun isGateway(peer: String): Boolean {
+        val v4 = Regex("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3}):(\\d{1,5})$").find(peer)
+        if (v4 != null) {
+            val (a, b, c, d, port) = v4.destructured.toList().map { it.toInt() }
+            if (c > 255 || d > 255 || port !in 1..65535) return false
+            return (a == 162 && b == 159) || (a == 188 && b == 114 && c in 96..111)
+        }
+        return Regex("^\\[2606:4700:[0-9a-fA-F:]+\\]:(\\d{1,5})$").find(peer)?.groupValues?.get(1)?.toInt() in 1..65535
+    }
 
     /** Aether's line when it drops a tunnel over its exit country; after a few, two hops won't get a foreign exit here. */
     val EXIT_REFUSED = Regex("exit location [A-Z]{2} rejected")

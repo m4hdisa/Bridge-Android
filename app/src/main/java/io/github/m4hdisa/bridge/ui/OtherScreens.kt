@@ -233,6 +233,10 @@ fun LazyListScope.settingsPage(model: AppModel) {
             SettingRow(Icons.Zap, stringResource(R.string.fake_ip), stringResource(R.string.fake_ip_hint)) {
                 BridgeSwitch(model.fakeIp, { model.changeFakeIp(it) })
             }
+            HorizontalDivider(color = Bridge.border, modifier = Modifier.padding(vertical = 4.dp))
+            SettingRow(Icons.ScrollText, stringResource(R.string.detailed_log), stringResource(R.string.detailed_log_hint)) {
+                BridgeSwitch(model.detailedLog, { model.changeDetailedLog(it) })
+            }
         }
         Spacer(Modifier.height(12.dp))
         BridgeCard {

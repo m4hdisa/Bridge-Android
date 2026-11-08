@@ -5,6 +5,7 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -121,7 +122,11 @@ private fun RegionPicker(model: AppModel) {
             Modifier.clip(ControlShape).background(Bridge.muted).clickable { open = true }.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(region?.let { "${flag(it)} $it" } ?: stringResource(R.string.warp_region_any), style = MaterialTheme.typography.labelMedium)
+            if (region != null) {
+                FlagIcon(region, width = 16.dp)
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(region ?: stringResource(R.string.warp_region_any), style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.width(4.dp))
             Icon(Icons.ChevronDown, stringResource(R.string.warp_region), Modifier.size(14.dp), tint = Bridge.mutedForeground)
         }
@@ -131,7 +136,7 @@ private fun RegionPicker(model: AppModel) {
                 model.changePsiphonRegion(null)
             })
             for (code in Warp.PSIPHON_REGIONS) {
-                DropdownMenuItem(text = { Text("${flag(code)} $code") }, onClick = {
+                DropdownMenuItem(text = { Text(code) }, leadingIcon = { FlagIcon(code, width = 18.dp) }, onClick = {
                     open = false
                     model.changePsiphonRegion(code)
                 })
@@ -269,7 +274,45 @@ private fun qrBitmap(text: String, size: Int): Bitmap? = runCatching {
     Bitmap.createBitmap(pixels, matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
 }.getOrNull()
 
-/** A country's flag emoji. Iran's is never shown. */
+/**
+ * A country's flag, the same pictures the Windows app uses (country-flag-icons), drawn from
+ * assets/flags; a globe when there is none. Iran's is never shown.
+ */
+@Composable
+fun FlagIcon(code: String?, modifier: Modifier = Modifier, width: androidx.compose.ui.unit.Dp = 20.dp) {
+    val context = LocalContext.current
+    val bitmap = remember(code) { code?.let { Flags.get(context, it) } }
+    val size = Modifier.size(width = width, height = width * 2 / 3)
+    if (bitmap == null) {
+        Icon(Icons.Globe, null, modifier.then(size), tint = Bridge.mutedForeground)
+        return
+    }
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(3.dp)
+    Image(
+        bitmap,
+        code,
+        modifier.then(size).clip(shape).border(1.dp, Color.White.copy(alpha = 0.1f), shape),
+        contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+    )
+}
+
+private object Flags {
+    private val cache = HashMap<String, androidx.compose.ui.graphics.ImageBitmap?>()
+
+    fun get(context: android.content.Context, code: String): androidx.compose.ui.graphics.ImageBitmap? = synchronized(cache) {
+        cache.getOrPut(code) {
+            if (code == "IR" || !Regex("^[A-Z]{2}$").matches(code)) return@getOrPut null
+            runCatching {
+                val svg = context.assets.open("flags/$code.svg").use { com.caverock.androidsvg.SVG.getFromInputStream(it) }
+                val bitmap = Bitmap.createBitmap(96, 64, Bitmap.Config.ARGB_8888)
+                svg.renderToCanvas(android.graphics.Canvas(bitmap), android.graphics.RectF(0f, 0f, 96f, 64f))
+                bitmap.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+}
+
+/** A country's flag emoji, for plain text only (the screens use FlagIcon). Iran's is never shown. */
 fun flag(country: String): String {
     if (country.length != 2 || !country.all { it in 'A'..'Z' } || country == "IR") return ""
     return country.map { String(Character.toChars(0x1F1E6 + (it - 'A'))) }.joinToString("")

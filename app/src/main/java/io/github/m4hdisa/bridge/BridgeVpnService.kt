@@ -104,7 +104,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             }
             VpnState.progress(R.string.progress_starting)
             val forXray = input.servers.filter { it.second.usesXray }
-            if (forXray.isNotEmpty()) input = startXray(input, forXray, store.includeSelf)
+            if (store.detailedLog) input = input.copy(logLevel = "debug")
+            if (forXray.isNotEmpty()) input = startXray(input, forXray, store.includeSelf, store.detailedLog)
             val built = BoxConfig.build(input)
             val monitor = NetworkMonitor(this).also { this.monitor = it }
             monitor.start()
@@ -125,6 +126,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             if (stopping) return@synchronized
             VpnState.session = VpnState.Session(clash, proxy, built.tags)
             VpnState.set(VpnState.Status.Running)
+            showSpeed(clash)
             // The account a public starter one stood in for, made through the tunnel now that it works.
             warp?.let { w -> Thread { runCatching { w.replaceStarterAccount(proxy) } }.apply { isDaemon = true }.start() }
         } catch (e: WarpException) {
@@ -142,7 +144,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
      * network: Xray is a plain Linux program to Android and can't use the phone's DNS settings.
      * If Xray can't start, those servers are left out and the rest still connect.
      */
-    private fun startXray(input: BoxInput, servers: List<Pair<String, ParsedLink>>, bridgeOnVpn: Boolean): BoxInput {
+    private fun startXray(input: BoxInput, servers: List<Pair<String, ParsedLink>>, bridgeOnVpn: Boolean, detailed: Boolean): BoxInput {
         val xray = XrayProcess(this).also { this.xray = it }
         val xrayLog = File(filesDir, XRAY_LOG_FILE)
         if (!xray.available) {
@@ -160,7 +162,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             Xray.Entry(port, pinned, if (Xray.needsRelay(pinned)) freePort() else null)
         }
         return try {
-            xray.start(Xray.config(entries, auth.user, auth.secret), entries.first().port, xrayLog)
+            xray.start(Xray.config(entries, auth.user, auth.secret, if (detailed) "info" else "warning"), entries.first().port, xrayLog)
             input.copy(xrayPorts = ports, xrayAuth = auth, directIps = if (bridgeOnVpn) ips.values.distinct() else emptyList())
         } catch (e: Exception) {
             Log.e(TAG, "Xray failed", e)
@@ -240,24 +242,47 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     override fun onRevoke() = stopVpn()
 
+    /** The speed in the notification, every second while connected, from the Clash API. */
+    private fun showSpeed(clash: LocalAccess) {
+        Thread {
+            val manager = getSystemService(NotificationManager::class.java)
+            while (!stopping && VpnState.session?.clash === clash) {
+                runCatching {
+                    Clash.traffic(clash, { !stopping && VpnState.session?.clash === clash }) { up, down ->
+                        val text = "↓ ${io.github.m4hdisa.bridge.ui.rate(down)}   ↑ ${io.github.m4hdisa.bridge.ui.rate(up)}"
+                        if (!stopping) runCatching { manager.notify(NOTIFICATION_ID, notification(text)) }
+                    }
+                }
+                if (!stopping) Thread.sleep(1_000)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
     private fun showNotification() {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.channel_name), NotificationManager.IMPORTANCE_LOW))
         }
+        val notification = notification(getString(R.string.status_starting))
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED else 0
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+    }
+
+    private fun notification(text: String): Notification {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), flags)
         val stop = PendingIntent.getService(this, 1, Intent(this, BridgeVpnService::class.java).setAction(ACTION_STOP), flags)
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(getString(R.string.status_on))
+        return NotificationCompat.Builder(this, CHANNEL)
+            .setContentTitle(getString(if (VpnState.session != null) R.string.status_on else R.string.status_starting))
+            .setContentText(text)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(open)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
             .addAction(0, getString(R.string.disconnect), stop)
             .build()
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED else 0
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
     }
 
     override fun openTun(options: TunOptions): Int {
