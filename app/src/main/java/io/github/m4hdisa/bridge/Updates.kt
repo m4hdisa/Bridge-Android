@@ -130,9 +130,9 @@ class Updater(private val context: Context) {
         val update = packages.getPackageArchiveInfo(apk.path, flags) ?: throw UpdateRejected("not an app")
         if (update.packageName != context.packageName) throw UpdateRejected("not Bridge")
         val mine = packages.getPackageInfo(context.packageName, flags)
-        if (PackageInfoCompat.getLongVersionCode(update) <= PackageInfoCompat.getLongVersionCode(mine)) throw UpdateRejected("not newer than this version")
         val signers = signers(update)
         if (signers.isEmpty() || signers != signers(mine)) throw UpdateRejected("signed by someone else")
+        if (PackageInfoCompat.getLongVersionCode(update) <= PackageInfoCompat.getLongVersionCode(mine)) throw UpdateRejected("not newer than this version")
     }
 
     private fun signers(info: PackageInfo): Set<String> {
