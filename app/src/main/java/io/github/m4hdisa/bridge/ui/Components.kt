@@ -1,5 +1,6 @@
 package io.github.m4hdisa.bridge.ui
 
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -303,64 +304,97 @@ fun SettingRow(icon: ImageVector?, title: String, subtitle: String?, modifier: M
 enum class KeyState { Off, Busy, On }
 
 /**
- * The connect button, built like a key on a car's dashboard (the Windows app's default): a round
- * key set in a dark frame, with a small light above the icon. Off: the light is dark.
- * Connecting: it blinks blue. On: it glows green, and the key stays a little pressed in.
+ * The connect button in the Windows app's Classic style, sized for a phone: a bezel ring with a
+ * small gap, and the button, a disc lit from above. Connecting: a thin arc runs around the
+ * bezel. On: the disc turns the logo blue with a soft light slowly turning inside it, and a
+ * still blue light behind it all.
  */
 @Composable
 fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val on = state == KeyState.On
+    val busy = state == KeyState.Busy
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val blink = rememberInfiniteTransition(label = "key").animateFloat(0.3f, 1f, infiniteRepeatable(tween(650), RepeatMode.Reverse), label = "key").value
+    val lit by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, tween(500), label = "lit")
+    val glow by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, tween(700), label = "glow")
+    val turning = rememberInfiniteTransition(label = "key")
+    val arc = turning.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = androidx.compose.animation.core.LinearEasing)), label = "arc").value
+    val swirl = turning.animateFloat(0f, 360f, infiniteRepeatable(tween(14_000, easing = androidx.compose.animation.core.LinearEasing)), label = "swirl").value
+    val deep = Color(0xFF0230B0)
     Box(
         modifier
-            .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(Color(0xFF161616), Color(0xFF0B0B0B))))
-            .border(1.dp, Color(0x0AFFFFFF), CircleShape)
-            .padding(12.dp),
+            .size(172.dp)
+            .drawBehind {
+                // The still blue light behind it, on only; it fades to nothing well inside the box.
+                if (glow > 0f) drawCircle(Brush.radialGradient(listOf(Bridge.primary.copy(alpha = 0.3f * glow), Color.Transparent), radius = size.minDimension / 2), radius = size.minDimension / 2)
+            },
         contentAlignment = Alignment.Center,
     ) {
+        // The bezel: a ring with a small gap around the button.
+        Box(
+            Modifier
+                .size(152.dp)
+                .clip(CircleShape)
+                .background(if (on) Bridge.primary.copy(alpha = 0.10f) else Color(0x99141414))
+                .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.3f) else Color(0x12FFFFFF), CircleShape),
+        )
+        if (busy) {
+            androidx.compose.foundation.Canvas(Modifier.size(152.dp)) {
+                val w = 1.5.dp.toPx()
+                drawArc(
+                    Bridge.brand,
+                    startAngle = arc,
+                    sweepAngle = 70f,
+                    useCenter = false,
+                    topLeft = Offset(w / 2, w / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = w, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                )
+            }
+        }
         Column(
             Modifier
-                .offset(y = if (pressed) 2.dp else if (on) 1.dp else 0.dp)
-                .size(176.dp)
-                .shadow(if (on || pressed) 4.dp else 14.dp, CircleShape, ambientColor = Color.Black, spotColor = Color.Black)
+                .size(124.dp)
+                .scale(if (pressed) 0.97f else 1f)
+                .shadow(if (on) 18.dp else 10.dp, CircleShape, ambientColor = if (on) Bridge.primary else Color.Black, spotColor = if (on) Bridge.primary else Color.Black)
                 .clip(CircleShape)
-                .background(Brush.verticalGradient(0f to Color(0xFF2E2E2E), 0.55f to Color(0xFF1D1D1D), 1f to Color(0xFF161616)))
-                .border(1.dp, Color(if (on) 0x14FFFFFF else 0x1FFFFFFF), CircleShape)
                 .drawBehind {
-                    // A soft sheen across the top, like light on a plastic key; it fades out before any edge.
-                    drawRect(Brush.radialGradient(listOf(Color(0x17FFFFFF), Color.Transparent), center = Offset(size.width / 2, 0f), radius = size.width * 0.38f))
+                    // The disc, lit from above: dark when off, the logo blue when on.
+                    drawRect(Brush.verticalGradient(listOf(Color(0xFF2B2B2B), Color(0xFF1A1A1A))))
+                    if (lit > 0f) {
+                        drawRect(Brush.verticalGradient(0f to Color(0xFF3D6BF5), 0.45f to Bridge.primary, 1f to deep), alpha = lit)
+                        // A soft light slowly turning inside it.
+                        rotate(swirl) {
+                            drawCircle(
+                                Brush.sweepGradient(
+                                    0f to Color.Transparent,
+                                    0.19f to Color(0x80A9CCFF),
+                                    0.42f to Color.Transparent,
+                                    0.58f to Color.Transparent,
+                                    0.78f to Color(0x8C5B3CE6),
+                                    1f to Color.Transparent,
+                                ),
+                                radius = size.minDimension * 0.75f,
+                                alpha = 0.55f * lit,
+                            )
+                        }
+                    }
+                    // A highlight across the top, fading out before any edge.
+                    drawRect(Brush.radialGradient(listOf(Color.White.copy(alpha = if (on) 0.22f else 0.08f), Color.Transparent), center = Offset(size.width / 2, 0f), radius = size.width * 0.45f))
                 }
+                .border(1.dp, Color.White.copy(alpha = if (on) 0.18f else 0.08f), CircleShape)
                 .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
                 .alpha(if (enabled) 1f else 0.5f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            // The indicator light.
-            val light = when (state) {
-                KeyState.On -> Bridge.lightOn
-                KeyState.Busy -> Bridge.brand.copy(alpha = blink)
-                KeyState.Off -> Color(0x1FFFFFFF)
+            val ink = when {
+                on -> Color.White
+                busy -> Bridge.brand
+                else -> Bridge.mutedForeground
             }
-            Box(
-                Modifier
-                    .size(width = 28.dp, height = 6.dp)
-                    .drawBehind {
-                        if (state != KeyState.Off) {
-                            val glow = if (on) Bridge.lightOn else Bridge.brand.copy(alpha = blink)
-                            // A round glow that fades to nothing at its edge, so it has no outline.
-                            drawCircle(Brush.radialGradient(listOf(glow.copy(alpha = glow.alpha * 0.45f), Color.Transparent), radius = size.width * 0.9f), radius = size.width * 0.9f)
-                        }
-                    }
-                    .clip(CircleShape)
-                    .background(light),
-            )
-            Spacer(Modifier.height(12.dp))
-            val ink = if (on) Bridge.foreground else Bridge.mutedForeground
-            Icon(Icons.Power, contentDescription, Modifier.size(40.dp), tint = ink)
-            Spacer(Modifier.height(12.dp))
+            Icon(Icons.Power, contentDescription, Modifier.size(34.dp), tint = ink)
+            Spacer(Modifier.height(6.dp))
             Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp), color = ink)
         }
     }

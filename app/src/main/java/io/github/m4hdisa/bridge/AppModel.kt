@@ -88,6 +88,13 @@ class AppModel(context: Context) {
     var psiphonRegion by mutableStateOf(store.psiphonRegion)
         private set
 
+    var warpConfigs by mutableStateOf(store.warpConfigs)
+        private set
+
+    /** "Find configs" is running. */
+    var findingWarp by mutableStateOf(false)
+        private set
+
     /** Free WARP can run on this phone (Android 10 and up, and a build that has Aether). */
     val warpAvailable = WarpRunner.isAvailable(app)
 
@@ -113,6 +120,10 @@ class AppModel(context: Context) {
 
     /** What's being done in the background, shown as a bar with this text. */
     var busy by mutableStateOf<Int?>(null)
+        private set
+
+    /** Subscriptions being updated now, by id; their update buttons spin. */
+    var updating by mutableStateOf<Set<String>>(emptySet())
         private set
     private var busyCount = 0
 
@@ -207,7 +218,7 @@ class AppModel(context: Context) {
 
     private fun connect(askPermission: (Intent) -> Unit) {
         pendingPermission = askPermission
-        if (store.servers.isEmpty() && store.selected != Warp.ID) {
+        if (store.servers.isEmpty() && !Warp.isWarp(store.selected)) {
             localError = R.string.no_servers
             return
         }
@@ -383,7 +394,7 @@ class AppModel(context: Context) {
         store.selected = id
         selected = id
         // The WARP account is made now, so connecting needn't wait for it.
-        if (id == Warp.ID && warpAvailable) work.execute { WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).prepareAccount() }
+        if (Warp.isWarp(id) && warpAvailable) work.execute { WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).prepareAccount() }
         val session = VpnState.session
         if (session != null && running) {
             val tag = if (id == AUTO) AUTO.takeIf { session.tags.size > 1 } else session.tags[id]
@@ -409,7 +420,34 @@ class AppModel(context: Context) {
 
     val autoSelected get() = servers.size > 1 && selected != Warp.ID && servers.none { it.id == selected }
 
-    val warpSelected get() = selected == Warp.ID
+    val warpSelected get() = Warp.isWarp(selected)
+
+    /** Tests every WARP way on the phone's own network and saves the ones that work, fastest first. */
+    fun findWarpConfigs() {
+        if (findingWarp || !warpAvailable) return
+        if (status != VpnState.Status.Stopped) return say(R.string.warp_find_disconnect)
+        findingWarp = true
+        markBusy(R.string.progress_warp_search)
+        work.execute {
+            val result = runCatching {
+                WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).find { res -> ui { busy = res } }
+            }
+            result.onSuccess { found -> if (found.isNotEmpty()) store.warpConfigs = found }
+            ui {
+                findingWarp = false
+                markBusy(null)
+                warpConfigs = store.warpConfigs
+                result.onSuccess { if (it.isEmpty()) say(R.string.warp_found_none) else say(R.string.warp_found, it.size) }
+                    .onFailure { e -> if (e is WarpException) say(e.res) else say(R.string.warp_found_none) }
+            }
+        }
+    }
+
+    fun removeWarpConfig(config: WarpConfig) {
+        store.warpConfigs = store.warpConfigs.filter { it.id != config.id }
+        warpConfigs = store.warpConfigs
+        if (selected == Warp.selectionOf(config)) select(Warp.ID)
+    }
 
     /** A subscription address, or text with share links in it (or a JSON config). */
     fun addText(text: String) {
@@ -426,6 +464,8 @@ class AppModel(context: Context) {
     fun addSubscription(url: String) {
         val existing = store.subscriptions.firstOrNull { it.url == url }
         val subscription = existing ?: Subscription(UUID.randomUUID().toString(), url, Uri.parse(url).host ?: url)
+        if (subscription.id in updating) return
+        updating = updating + subscription.id
         markBusy(R.string.updating)
         work.execute {
             val result = runCatching { Subscriptions.fetch(url) }
@@ -434,6 +474,7 @@ class AppModel(context: Context) {
             }
             ui {
                 markBusy(null)
+                updating = updating - subscription.id
                 reload()
                 result.onSuccess { say(R.string.sub_added, it.links.size) }
                     .onFailure { say(R.string.sub_failed, subscription.name, it.message ?: it.toString()) }
@@ -451,22 +492,29 @@ class AppModel(context: Context) {
             return
         }
         if (due.any { it.public }) findPublic()
-        val own = due.filter { !it.public }
+        val own = due.filter { !it.public && it.id !in updating }
         if (own.isEmpty()) return run { then?.invoke() }
         markBusy(R.string.updating)
-        work.execute {
-            val failures = mutableListOf<Pair<String, String>>()
-            for (subscription in own) {
+        updating = updating + own.map { it.id }
+        // All at once, each on its own thread: one slow panel doesn't hold up the rest.
+        val left = java.util.concurrent.atomic.AtomicInteger(own.size)
+        val failures = java.util.Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        for (subscription in own) {
+            work.execute {
                 runCatching { Subscriptions.fetch(subscription.url) }
                     .onSuccess { store.replaceSubscription(subscription.copy(name = it.title ?: subscription.name, updatedAt = System.currentTimeMillis(), usage = it.usage ?: subscription.usage), it.links) }
                     .onFailure { failures += subscription.name to (it.message ?: it.toString()) }
-            }
-            ui {
-                markBusy(null)
-                reload()
-                val first = failures.firstOrNull()
-                if (first != null) say(R.string.sub_failed, first.first, first.second) else if (!onlyStale) say(R.string.subs_updated)
-                then?.invoke()
+                val last = left.decrementAndGet() == 0
+                ui {
+                    updating = updating - subscription.id
+                    reload()
+                    if (last) {
+                        markBusy(null)
+                        val first = failures.firstOrNull()
+                        if (first != null) say(R.string.sub_failed, first.first, first.second) else if (!onlyStale) say(R.string.subs_updated)
+                        then?.invoke()
+                    }
+                }
             }
         }
     }
@@ -476,6 +524,8 @@ class AppModel(context: Context) {
     }
 
     fun findPublic() {
+        if (PublicConfigs.SUBSCRIPTION_ID in updating) return
+        updating = updating + PublicConfigs.SUBSCRIPTION_ID
         markBusy(R.string.public_downloading)
         work.execute {
             val result = runCatching {
@@ -491,6 +541,7 @@ class AppModel(context: Context) {
             }
             ui {
                 markBusy(null)
+                updating = updating - PublicConfigs.SUBSCRIPTION_ID
                 reload()
                 result.onSuccess { found -> if (found.isEmpty()) say(R.string.public_none) else say(R.string.public_done, found.size) }
                     .onFailure { say(R.string.public_failed, it.message ?: it.toString()) }

@@ -51,7 +51,7 @@ data class Server(
  */
 data class Subscription(val id: String, val url: String, val name: String, val public: Boolean = false, val updatedAt: Long = 0, val usage: Usage? = null) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("url", url).put("name", name).put("public", public).put("updatedAt", updatedAt).also { o ->
-        usage?.let { o.put("used", it.used).put("total", it.total).put("expire", it.expire) }
+        usage?.let { o.put("used", it.used).put("total", it.total).put("expire", it.expire).put("remaining", it.remaining) }
     }
 
     companion object {
@@ -61,7 +61,7 @@ data class Subscription(val id: String, val url: String, val name: String, val p
             o.optString("name"),
             o.optBoolean("public"),
             o.optLong("updatedAt"),
-            if (o.has("used") || o.has("total") || o.has("expire")) Usage(o.optLong("used"), o.optLong("total"), o.optLong("expire")) else null,
+            if (o.has("used") || o.has("total") || o.has("expire")) Usage(o.optLong("used"), o.optLong("total"), o.optLong("expire"), o.optLong("remaining")) else null,
         )
     }
 }
@@ -109,10 +109,20 @@ class Store(context: Context) {
         get() = prefs.getBoolean("bypassIran", true)
         set(value) = prefs.edit().putBoolean("bypassIran", value).apply()
 
-    /** Instant made-up DNS answers (see BoxConfig); off: real answers over DNS-over-HTTPS. */
+    /**
+     * Instant made-up DNS answers (see BoxConfig); off: real answers over DNS-over-HTTPS. Off by
+     * default: Android and apps such as Instagram keep made-up answers after a reconnect, and
+     * those only work while sing-box still knows what they stand for.
+     */
     var fakeIp: Boolean
-        get() = prefs.getBoolean("fakeIp", true)
-        set(value) = prefs.edit().putBoolean("fakeIp", value).apply()
+        get() = prefs.getBoolean("fakeIp2", false)
+        set(value) = prefs.edit().putBoolean("fakeIp2", value).apply()
+
+    /** WARP configs "Find configs" saved, fastest first. */
+    @get:Synchronized @set:Synchronized
+    var warpConfigs: List<WarpConfig>
+        get() = readArray("warpConfigs").mapNotNull { WarpConfig.fromJson(it) }
+        set(value) = prefs.edit().putString("warpConfigs", JSONArray(value.map { it.toJson() }).toString()).apply()
 
     /** How Free WARP connects. */
     var warpChoice: Warp.Choice
@@ -152,7 +162,7 @@ class Store(context: Context) {
     fun removeSubscription(id: String) {
         servers = servers.filter { it.subscription != id }
         subscriptions = subscriptions.filter { it.id != id }
-        if (selected != Warp.ID && servers.none { it.id == selected }) selected = AUTO
+        if (!Warp.isWarp(selected) && servers.none { it.id == selected }) selected = AUTO
     }
 
     @Synchronized
@@ -171,6 +181,22 @@ class Store(context: Context) {
         servers = servers.map { s -> delays[s.id]?.let { s.copy(delay = it) } ?: s }
     }
 
+    /** Subscriptions saved before 0.4.2 still list their traffic-and-days configs as servers. */
+    private fun dropInfoConfigs() {
+        val all = servers
+        val info = all.filter { it.subscription != null && SubInfo.isInfo(it.name) }
+        if (info.isEmpty()) return
+        val bySub = info.groupBy { it.subscription }
+        // A subscription that is nothing but such names keeps them: they may be real servers.
+        val drop = bySub.filter { (sub, list) -> all.count { it.subscription == sub } > list.size }.values.flatten().map { it.id }.toSet()
+        if (drop.isEmpty()) return
+        servers = all.filter { it.id !in drop }
+        subscriptions = subscriptions.map { s ->
+            if (s.usage != null) s else SubInfo.usage(info.filter { it.subscription == s.id && it.id in drop }.map { it.name })?.let { s.copy(usage = it) } ?: s
+        }
+        if (selected in drop) selected = AUTO
+    }
+
     private fun readArray(key: String): List<JSONObject> {
         val text = prefs.getString(key, null) ?: return emptyList()
         val array = runCatching { JSONArray(text) }.getOrNull() ?: return emptyList()
@@ -179,6 +205,7 @@ class Store(context: Context) {
 
     /** 0.1.0 kept one link. */
     private fun migrate() {
+        dropInfoConfigs()
         val old = prefs.getString("link", null) ?: return
         if (old.isNotBlank() && !prefs.contains("servers")) {
             val server = Server.fromLink(old)

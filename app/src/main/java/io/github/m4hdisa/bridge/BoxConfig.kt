@@ -81,6 +81,8 @@ object BoxConfig {
         val autoCandidates = tags.values.toList()
         input.warpPort?.let { port ->
             tags[Warp.ID] = WARP_TAG
+            // A saved WARP config is the same tunnel to sing-box.
+            if (Warp.isWarp(input.selected)) tags[input.selected] = WARP_TAG
             outbounds.put(JSONObject().put("type", "socks").put("tag", WARP_TAG).put("server", "127.0.0.1").put("server_port", port).put("version", "5"))
         }
         require(tags.isNotEmpty()) { "no servers" }
@@ -113,6 +115,9 @@ object BoxConfig {
         if (input.proxy != null) routeRules.put(JSONObject().put("inbound", JSONArray().put("bridge-in")).put("outbound", "proxy"))
         if (input.directIps.isNotEmpty()) routeRules.put(JSONObject().put("ip_cidr", JSONArray(input.directIps.map { if (':' in it) "$it/128" else "$it/32" })).put("outbound", "direct"))
         routeRules.put(JSONObject().put("ip_cidr", JSONArray().put(IRAN_FAKE_RANGE)).put("action", "reject"))
+        // Without FakeIP, made-up addresses apps kept from an earlier connection lead nowhere:
+        // refused at once, so the app asks for the real address instead of waiting.
+        if (!input.fakeIp) routeRules.put(JSONObject().put("ip_cidr", JSONArray().put(FAKE_RANGE)).put("action", "reject"))
         routeRules.put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
         if (input.bypassIran) {
             dnsRules.put(JSONObject().put("domain_suffix", JSONArray().put(".ir")).put("server", "local"))

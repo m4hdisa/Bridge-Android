@@ -191,7 +191,7 @@
     <string name="stat_no_end">بدون تاریخ پایان</string>
     <string name="stat_ended">تمام شده</string>
     <string name="fake_ip">DNS سریع (FakeIP)</string>
-    <string name="fake_ip_hint">سایت‌های جدید بدون منتظر ماندن برای پیدا کردن آدرس باز می‌شوند: سرور خودش آدرس را پیدا می‌کند. اگر برنامه‌ای که با آدرس IP کار می‌کند خراب شد، خاموشش کنید.</string>
+    <string name="fake_ip_hint">سایت‌های جدید بدون منتظر ماندن برای پیدا کردن آدرس باز می‌شوند. پیش‌فرض خاموش است: بعضی برنامه‌ها بعد از وصل شدن دوباره آدرس‌های ساختگی را نگه می‌دارند و تا مدتی چیزی باز نمی‌کنند.</string>
     <string name="server_qr">نمایش کد QR</string>
     <string name="qr_title">کد QR</string>
     <string name="qr_hint">با Bridge یا برنامه‌ی دیگری روی گوشی دیگر اسکنش کنید. رمز سرور داخلش است: فقط به کسی که اعتماد دارید نشانش دهید.</string>
@@ -219,4 +219,17 @@
     <!-- 0.4.1 -->
     <string name="detailed_log">لاگ دقیق</string>
     <string name="detailed_log_hint">همه‌ی اتصال‌ها در لاگ‌ها نوشته می‌شوند تا معلوم شود چرا چیزی باز نمی‌شود. بعدش خاموشش کنید: گوشی را کمی کند می‌کند.</string>
+
+    <!-- 0.4.2 -->
+    <string name="warp_find">پیدا کردن کانفیگ</string>
+    <string name="warp_finding">در حال پیدا کردن…</string>
+    <string name="warp_saved_title">کانفیگ‌های ذخیره‌شده</string>
+    <string name="warp_find_hint">همه‌ی راه‌های عبور از شبکه‌ی شما را امتحان می‌کند، سرعت هر کدام را می‌سنجد (حدود ۵ مگابایت برای هر کدام) و آن‌هایی که کار می‌کنند را، سریع‌ترین اول، ذخیره می‌کند. کانفیگ ذخیره‌شده در چند ثانیه وصل می‌شود.</string>
+    <string name="warp_find_disconnect">اول قطع کنید: کانفیگ‌ها روی شبکه‌ی خود شما تست می‌شوند.</string>
+    <string name="warp_found">%1$d کانفیگ WARP پیدا شد</string>
+    <string name="warp_found_none">الان روی این شبکه راهی پیدا نشد</string>
+    <string name="warp_config_name">WARP · %1$s</string>
+
+    <!-- 0.4.2 apps -->
+    <string name="apps_full_hint">همه‌ی برنامه‌ها از VPN استفاده می‌کنند. برای انتخاب برنامه‌ها، بالا «برنامه‌محور» را بزنید.</string>
 </resources>

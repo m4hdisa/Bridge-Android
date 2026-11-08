@@ -76,7 +76,7 @@ object Clash {
 class FetchResult(val links: List<String>, val title: String?, val usage: Usage? = null)
 
 /** A subscription's "subscription-userinfo" header: traffic used and allowed, in bytes, and when it ends (Unix seconds). */
-data class Usage(val used: Long, val total: Long, val expire: Long) {
+data class Usage(val used: Long, val total: Long, val expire: Long, val remaining: Long = 0) {
     companion object {
         fun parse(header: String?): Usage? {
             if (header.isNullOrBlank()) return null
@@ -89,19 +89,41 @@ data class Usage(val used: Long, val total: Long, val expire: Long) {
 }
 
 object Subscriptions {
-    /** Directly first; if that fails while connected, through the VPN, since many lists are blocked in Iran. */
+    /**
+     * Directly and, while connected, through the VPN at the same time (many lists are blocked in
+     * Iran): the first good answer wins. Never longer than DOWNLOAD_MS, so an update can't hang.
+     */
     fun download(url: String): Page {
-        val direct = runCatching { downloadRetrying { Net.direct(url) } }
-        val page = direct.getOrNull()
-        if (page != null && page.ok) return page
         val session = VpnState.session
-        if (session != null) {
-            val through = runCatching { downloadRetrying { Net.through(session.proxy, url) } }.getOrNull()
-            if (through != null && through.ok) return through
+        val ways = mutableListOf<() -> Page>({ downloadRetrying { Net.direct(url, 12_000) } })
+        if (session != null) ways += { downloadRetrying { Net.through(session.proxy, url, 15_000) } }
+        val pool = Executors.newFixedThreadPool(ways.size)
+        val done = java.util.concurrent.ExecutorCompletionService<Page>(pool)
+        ways.forEach { way -> done.submit(Callable { way() }) }
+        val deadline = System.currentTimeMillis() + DOWNLOAD_MS
+        var failed: Page? = null
+        var error: Throwable? = null
+        try {
+            repeat(ways.size) {
+                val left = deadline - System.currentTimeMillis()
+                val f = (if (left > 0) done.poll(left, java.util.concurrent.TimeUnit.MILLISECONDS) else null)
+                    ?: throw IOException("no answer within ${DOWNLOAD_MS / 1000} s")
+                try {
+                    val page = f.get()
+                    if (page.ok) return page
+                    failed = page
+                } catch (e: java.util.concurrent.ExecutionException) {
+                    error = e.cause
+                }
+            }
+        } finally {
+            pool.shutdownNow()
         }
-        if (page != null) throw IOException("HTTP ${page.code}")
-        throw direct.exceptionOrNull() ?: IOException("no answer")
+        failed?.let { throw IOException("HTTP ${it.code}") }
+        throw error ?: IOException("no answer")
     }
+
+    private const val DOWNLOAD_MS = 30_000L
 
     /** Some panels answer 5xx now and then (rate limits); one retry usually gets through. */
     private fun downloadRetrying(get: () -> Page): Page {
@@ -118,7 +140,9 @@ object Subscriptions {
             panelSubscription(url)?.let { other -> links = runCatching { ShareLink.extract(download(other).body) }.getOrDefault(emptyList()) }
         }
         if (links.isEmpty()) throw IOException(noLinksReason(page.body))
-        return FetchResult(links, title(page.headers["profile-title"]), Usage.parse(page.headers["subscription-userinfo"]))
+        // Configs that only carry the traffic or days left become the subscription's usage.
+        val (servers, fromNames) = SubInfo.split(links)
+        return FetchResult(servers, title(page.headers["profile-title"]), Usage.parse(page.headers["subscription-userinfo"]) ?: fromNames)
     }
 
     /** A BPB panel's own address (…/panel, …/login or …/sub) leads to its plain list. Its fragment list is JSON for Xray. */

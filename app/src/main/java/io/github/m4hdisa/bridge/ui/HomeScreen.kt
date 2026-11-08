@@ -81,7 +81,7 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
         else -> KeyState.Busy
     }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(4.dp))
         ConnectKey(
             state = keyState,
             label = stringResource(if (status == VpnState.Status.Stopped) R.string.connect else R.string.disconnect),
@@ -89,7 +89,7 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
             enabled = status != VpnState.Status.Stopping,
             onClick = onConnect,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             StatusDot(
                 when {
@@ -110,10 +110,12 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
                         VpnState.Status.Stopping -> R.string.status_stopping
                     },
                 ),
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
             )
+            // As wide as the dot and its gap, so the words sit in the middle under the button.
+            Spacer(Modifier.width(18.dp))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             when (status) {
                 VpnState.Status.Running -> stringResource(R.string.connected_for, elapsed(model.connectedAt))
@@ -141,7 +143,7 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
 
     SectionLabel(stringResource(R.string.home_server)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconAction(Icons.RefreshCw, stringResource(R.string.refresh_all), { model.refreshAll() }, enabled = model.busy == null)
+            RefreshAction(stringResource(R.string.refresh_all), model.updating.isNotEmpty()) { model.refreshAll() }
             IconAction(Icons.Zap, stringResource(R.string.test_all), { model.measure() }, enabled = model.servers.isNotEmpty() && model.busy == null)
             Row(Modifier.clip(ControlShape).clickable(onClick = onOpenServers).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.manage_servers), style = MaterialTheme.typography.labelMedium, color = Bridge.mutedForeground)
@@ -455,6 +457,7 @@ private fun ConfigBox(model: AppModel, onAdd: () -> Unit) {
                     subtitle = "Cloudflare WARP",
                     trailing = { Badge(stringResource(R.string.warp_badge), Tone.Success) },
                 ) { model.select(Warp.ID) }
+                for (config in model.warpConfigs) WarpConfigRow(model, config)
             }
             if (usable.size > 1) {
                 if (model.warpAvailable) HorizontalDivider(color = Bridge.border, modifier = Modifier.padding(vertical = 4.dp))
@@ -517,7 +520,7 @@ private fun GroupHeader(model: AppModel, subscription: Subscription?, servers: L
         Spacer(Modifier.width(6.dp))
         Text(stringResource(R.string.configs_count, servers.size), style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
         Spacer(Modifier.weight(1f))
-        if (subscription != null) IconAction(Icons.RefreshCw, stringResource(R.string.sub_update), { model.updateSubscription(subscription) }, enabled = model.busy == null)
+        if (subscription != null) RefreshAction(stringResource(R.string.sub_update), subscription.id in model.updating) { model.updateSubscription(subscription) }
         IconAction(Icons.Zap, stringResource(R.string.test), { model.measure(servers) }, enabled = model.busy == null)
     }
 }
@@ -610,6 +613,8 @@ private fun SubscriptionRow(model: AppModel, s: Subscription) {
     val parts = mutableListOf(stringResource(R.string.configs_count, count))
     if (usage != null && usage.total > 0) {
         parts += stringResource(R.string.stat_traffic_of, Formatter.formatShortFileSize(context, usage.used), Formatter.formatShortFileSize(context, usage.total))
+    } else if (usage != null && usage.remaining > 0) {
+        parts += stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, usage.remaining))
     }
     if (usage != null && usage.expire > 0) {
         val ends = usage.expire * 1000
@@ -634,7 +639,7 @@ private fun SubscriptionRow(model: AppModel, s: Subscription) {
             }
         }
         Spacer(Modifier.width(4.dp))
-        IconAction(Icons.RefreshCw, stringResource(R.string.sub_update), { model.updateSubscription(s) }, enabled = model.busy == null)
+        RefreshAction(stringResource(R.string.sub_update), s.id in model.updating) { model.updateSubscription(s) }
     }
 }
 

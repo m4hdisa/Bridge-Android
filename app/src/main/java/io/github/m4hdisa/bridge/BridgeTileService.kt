@@ -37,7 +37,7 @@ class BridgeTileService : TileService() {
             VpnState.Status.Stopped -> {
                 val store = Store(this)
                 val ready = VpnService.prepare(this) == null &&
-                    (store.servers.isNotEmpty() || store.selected == Warp.ID) &&
+                    (store.servers.isNotEmpty() || Warp.isWarp(store.selected)) &&
                     !(store.perApp && store.apps.isEmpty())
                 if (ready) ContextCompat.startForegroundService(this, Intent(this, BridgeVpnService::class.java)) else openApp()
             }

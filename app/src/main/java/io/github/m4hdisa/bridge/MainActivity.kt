@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -185,7 +188,8 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
     var appFilter by rememberSaveable { mutableStateOf("") }
     var log by remember { mutableStateOf("") }
 
-    BackHandler(enabled = page != Screen.Home) { onPage(Screen.Home) }
+    // Apps opens from Settings now, so back goes there.
+    BackHandler(enabled = page != Screen.Home) { onPage(if (page == Screen.Apps) Screen.Settings else Screen.Home) }
 
     val message = model.message
     LaunchedEffect(message?.id) {
@@ -238,7 +242,7 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
                     Screen.Servers -> serversPage(model, onAdd = { addSheet = true }, onPublic = { publicDialog = true })
                     Screen.Apps -> appsPage(model, appFilter) { appFilter = it }
                     Screen.Logs -> logsPage(log)
-                    Screen.Settings -> settingsPage(model)
+                    Screen.Settings -> settingsPage(model, onOpenApps = { onPage(Screen.Apps) })
                 }
             }
         }
@@ -278,42 +282,45 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
 /** The pages, along the bottom like the Windows sidebar: the chosen one filled and lit. */
 @Composable
 private fun NavBar(page: Screen, onPage: (Screen) -> Unit) {
+    // Apps lives in Settings now (Per-App is a setting on a phone).
     val items: List<Triple<Screen, Int, Pair<ImageVector, ImageVector>>> = listOf(
         Triple(Screen.Home, R.string.nav_home, Icons.SquaresFour to Icons.SquaresFourFill),
         Triple(Screen.Servers, R.string.nav_servers, Icons.GlobeHemisphereWest to Icons.GlobeHemisphereWestFill),
-        Triple(Screen.Apps, R.string.nav_apps, Icons.AppWindow to Icons.AppWindowFill),
         Triple(Screen.Logs, R.string.nav_logs, Icons.Scroll to Icons.ScrollFill),
         Triple(Screen.Settings, R.string.nav_settings, Icons.GearSix to Icons.GearSixFill),
     )
-    Column(Modifier.background(Bridge.sidebar)) {
-        HorizontalDivider(color = Bridge.border)
+    val current = if (page == Screen.Apps) Screen.Settings else page
+    val pill = androidx.compose.foundation.shape.RoundedCornerShape(26.dp)
+    // A floating bar: the chosen page grows into a lit pill with its name; the others are icons.
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
         Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
+            Modifier
+                .fillMaxWidth()
+                .shadow(18.dp, pill, ambientColor = androidx.compose.ui.graphics.Color.Black, spotColor = androidx.compose.ui.graphics.Color.Black)
+                .clip(pill)
+                .background(Bridge.card)
+                .border(1.dp, Bridge.border, pill)
+                .padding(6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             for ((target, label, icons) in items) {
-                val on = page == target
-                Column(
+                val on = current == target
+                Row(
                     Modifier
-                        .weight(1f)
-                        .clip(ItemShape)
+                        .height(44.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
+                        .background(if (on) Bridge.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPage(target) }
-                        .padding(vertical = 2.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .animateContentSize()
+                        .padding(horizontal = if (on) 16.dp else 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        Modifier.clip(ItemShape).background(if (on) Bridge.sidebarAccent else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = 16.dp, vertical = 5.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(if (on) icons.second else icons.first, null, Modifier.size(20.dp), tint = if (on) Bridge.foreground else Bridge.mutedForeground)
+                    Icon(if (on) icons.second else icons.first, stringResource(label), Modifier.size(20.dp), tint = if (on) Bridge.brand else Bridge.mutedForeground)
+                    if (on) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(label), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = Bridge.brand, maxLines = 1)
                     }
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        stringResource(label),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (on) Bridge.foreground else Bridge.mutedForeground,
-                        maxLines = 1,
-                    )
                 }
             }
         }

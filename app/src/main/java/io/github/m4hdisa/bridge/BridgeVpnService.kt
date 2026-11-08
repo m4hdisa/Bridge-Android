@@ -93,11 +93,19 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             File(filesDir, XRAY_LOG_FILE).delete()
             val warpLog = File(filesDir, WARP_LOG_FILE).apply { delete() }
             var input = Profile.input(store, Rules.install(this))
-                .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = freshCacheFile().path)
-            if (store.selected == Warp.ID) {
+                // With FakeIP the made-up answers are kept in one file across connections, since
+                // apps keep using them after a reconnect; otherwise each connection has a file of its own.
+                .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = if (store.fakeIp) File(filesDir, FAKEIP_CACHE).path else freshCacheFile().path)
+            if (Warp.isWarp(store.selected)) {
                 val runner = WarpRunner(this, warpLog).also { warp = it }
-                val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }) {
-                    if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died))
+                val died = { if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died)) }
+                val saved = Warp.savedId(store.selected)?.let { id -> store.warpConfigs.firstOrNull { it.id == id } }
+                val port = if (saved != null) {
+                    runner.startSaved(saved, { VpnState.progress(it) }, died) { gateway ->
+                        store.warpConfigs = store.warpConfigs.map { if (it.id == saved.id) it.copy(gateway = gateway) else it }
+                    }
+                } else {
+                    runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }, died)
                 }
                 if (stopping) return@synchronized
                 input = input.copy(warpPort = port)
@@ -106,23 +114,29 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             val forXray = input.servers.filter { it.second.usesXray }
             if (store.detailedLog) input = input.copy(logLevel = "debug")
             if (forXray.isNotEmpty()) input = startXray(input, forXray, store.includeSelf, store.detailedLog)
-            val built = BoxConfig.build(input)
+            var built = BoxConfig.build(input)
             val monitor = NetworkMonitor(this).also { this.monitor = it }
             monitor.start()
             val server = CommandServer(this, this).also { this.server = it }
             server.start()
-            server.startOrReloadService(
-                built.json,
-                OverrideOptions().apply {
-                    // Bridge's own requests (subscriptions, pings) stay outside the VPN, like any app left out.
-                    val self = if (store.includeSelf) setOf(packageName) else emptySet()
-                    if (store.perApp) {
-                        includePackage = StringList((store.apps + self).toList())
-                    } else if (self.isEmpty()) {
-                        excludePackage = StringList(listOf(packageName))
-                    }
-                },
-            )
+            fun overrides() = OverrideOptions().apply {
+                // Bridge's own requests (subscriptions, pings) stay outside the VPN, like any app left out.
+                val self = if (store.includeSelf) setOf(packageName) else emptySet()
+                if (store.perApp) {
+                    includePackage = StringList((store.apps + self).toList())
+                } else if (self.isEmpty()) {
+                    excludePackage = StringList(listOf(packageName))
+                }
+            }
+            try {
+                server.startOrReloadService(built.json, overrides())
+            } catch (e: Exception) {
+                if (e.message?.contains("cache-file") != true) throw e
+                // The kept file is still held by a connection that didn't end: start on a new one.
+                Log.w(TAG, "cache file busy, starting with a new one", e)
+                built = BoxConfig.build(input.copy(cachePath = freshCacheFile().path))
+                server.startOrReloadService(built.json, overrides())
+            }
             if (stopping) return@synchronized
             VpnState.session = VpnState.Session(clash, proxy, built.tags)
             VpnState.set(VpnState.Status.Running)
@@ -498,6 +512,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         const val XRAY_LOG_FILE = "xray.log"
         const val WARP_LOG_FILE = "warp.log"
         private const val CACHE_PREFIX = "box-cache-"
+        private const val FAKEIP_CACHE = "fakeip-cache.db"
         private const val RESOLVE_TIMEOUT_MS = 5_000L
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"

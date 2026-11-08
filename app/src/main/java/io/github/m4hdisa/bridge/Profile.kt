@@ -17,7 +17,7 @@ object Profile {
         val parsed = servers.mapNotNull { s -> runCatching { s.id to ShareLink.parse(s.link) }.getOrNull() }
         val selected = store.selected
         // Free WARP needs no server of the user's own; BridgeVpnService adds its port.
-        if (parsed.isEmpty() && selected == Warp.ID) return BoxInput(emptyList(), selected, emptyList(), store.bypassIran, rulesDir, null, null, null, fakeIp = store.fakeIp)
+        if (parsed.isEmpty() && Warp.isWarp(selected)) return BoxInput(emptyList(), selected, emptyList(), store.bypassIran, rulesDir, null, null, null, fakeIp = store.fakeIp)
         if (parsed.isEmpty()) throw LinkException(if (servers.isEmpty()) "Add a server first" else "None of the servers can be used in this version")
         val kept = parsed.take(MAX_SERVERS).let { first ->
             if (first.any { it.first == selected }) first else first + parsed.filter { it.first == selected }

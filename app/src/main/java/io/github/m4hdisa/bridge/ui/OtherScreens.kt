@@ -195,7 +195,7 @@ private fun colored(log: String): AnnotatedString = buildAnnotatedString {
 
 // ---------- Settings ----------
 
-fun LazyListScope.settingsPage(model: AppModel) {
+fun LazyListScope.settingsPage(model: AppModel, onOpenApps: () -> Unit) {
     item {
         PageHeader(stringResource(R.string.settings_title), stringResource(R.string.settings_subtitle))
         Spacer(Modifier.height(16.dp))
@@ -221,6 +221,17 @@ fun LazyListScope.settingsPage(model: AppModel) {
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 8.dp),
             )
+            // The apps on the VPN, chosen here: the Apps page opens from this row.
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = Bridge.border)
+            SettingRow(
+                Icons.Smartphone,
+                stringResource(R.string.apps_on_vpn),
+                if (model.perApp) stringResource(R.string.apps_count, model.chosenApps.size) else stringResource(R.string.apps_full_hint),
+                onClick = onOpenApps,
+            ) {
+                DirectionalIcon(Icons.ChevronRight, null, Modifier.size(16.dp))
+            }
         }
         Spacer(Modifier.height(12.dp))
         BridgeCard {

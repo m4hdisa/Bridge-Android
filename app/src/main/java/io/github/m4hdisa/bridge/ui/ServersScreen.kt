@@ -184,7 +184,7 @@ private fun GroupCard(model: AppModel, subscription: Subscription?, servers: Lis
                 )
             }
             IconAction(Icons.Zap, stringResource(R.string.test), { model.measure(servers) }, enabled = servers.isNotEmpty())
-            if (subscription != null) IconAction(Icons.RefreshCw, stringResource(R.string.sub_update), { model.updateSubscription(subscription) })
+            if (subscription != null) RefreshAction(stringResource(R.string.sub_update), subscription.id in model.updating) { model.updateSubscription(subscription) }
             Box {
                 IconAction(Icons.Ellipsis, stringResource(R.string.more), { menu = true })
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Bridge.popover) {

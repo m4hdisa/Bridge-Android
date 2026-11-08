@@ -137,6 +137,48 @@ class WarpTest {
     }
 
     @Test
+    fun withoutFakeIpOldMadeUpAddressesAreRefused() {
+        val c = JSONObject(BoxConfig.build(input(listOf(server(0)), "id0", fakeIp = false)).json)
+        val route = c.getJSONObject("route").getJSONArray("rules").objects()
+        assertTrue(route.any { it.optString("action") == "reject" && it.optJSONArray("ip_cidr")?.getString(0) == BoxConfig.FAKE_RANGE })
+        val on = JSONObject(BoxConfig.build(input(listOf(server(0)), "id0", fakeIp = true)).json)
+        assertTrue(on.getJSONObject("route").getJSONArray("rules").objects().none { it.optJSONArray("ip_cidr")?.getString(0) == BoxConfig.FAKE_RANGE })
+    }
+
+    @Test
+    fun aSavedWarpConfigIsTheWarpTunnel() {
+        val id = Warp.selectionOf(WarpConfig("abc", Warp.Method.H2, "162.159.198.1:443"))
+        assertTrue(Warp.isWarp(id))
+        assertEquals("abc", Warp.savedId(id))
+        val built = BoxConfig.build(input(listOf(server(0)), id, warpPort = 41000))
+        val proxy = JSONObject(built.json).getJSONArray("outbounds").objects().first { it.getString("tag") == "proxy" }
+        assertEquals(BoxConfig.WARP_TAG, proxy.getString("default"))
+        assertTrue(Warp.isGateway("162.159.198.1:443"))
+        assertFalse(Warp.isGateway("1.2.3.4:443"))
+        assertEquals("162.159.198.131:443", Warp.gateway("[+] using cloudflare edge 162.159.198.131:443"))
+        val config = WarpConfig("abc", Warp.Method.MIM_H2, "188.114.97.3:443", "DE", 4200, 12.5)
+        assertEquals(config, WarpConfig.fromJson(config.toJson()))
+        assertTrue(Warp.args(Warp.Method.MIM_H2, 1, "c", peer = "188.114.97.3:443", fresh = true).containsAll(listOf("--mim-outer", "188.114.97.3:443", "--no-quick-reconnect")))
+    }
+
+    @Test
+    fun panelInfoConfigsBecomeTheSubscriptionsUsage() {
+        assertTrue(SubInfo.isInfo("16423-📊139.70GB Left-🕐expiredAt 26Days"))
+        assertTrue(SubInfo.isInfo("۲۶ روز باقیمانده"))
+        assertTrue(SubInfo.isInfo("حجم: ۵۰ گیگ باقی‌مانده"))
+        assertFalse(SubInfo.isInfo("Germany Reality"))
+        assertFalse(SubInfo.isInfo("🇩🇪 DE-2 | ws"))
+        val real = "vless://$uuid@203.0.113.1:443?security=tls#Germany"
+        val info = "vless://$uuid@0.0.0.0:1?security=tls#" + java.net.URLEncoder.encode("📊139.70GB Left-🕐expiredAt 26Days", "UTF-8").replace("+", "%20")
+        val (kept, usage) = SubInfo.split(listOf(info, real))
+        assertEquals(listOf(real), kept)
+        assertEquals((139.70 * 1024 * 1024 * 1024).toLong(), usage!!.remaining)
+        assertTrue(usage.expire > System.currentTimeMillis() / 1000 + 25 * 86_400)
+        // A list of nothing but such names keeps them: they may be real servers.
+        assertEquals(listOf(info), SubInfo.split(listOf(info)).first)
+    }
+
+    @Test
     fun subscriptionUsage() {
         val u = Usage.parse("upload=1000; download=2000; total=10737418240; expire=1893456000")!!
         assertEquals(3000L, u.used)

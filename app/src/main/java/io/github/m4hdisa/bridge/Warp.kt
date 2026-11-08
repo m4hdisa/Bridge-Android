@@ -12,8 +12,18 @@ import java.util.zip.Inflater
  * This file has no Android in it, so unit tests can check it; WarpRunner runs Aether.
  */
 object Warp {
-    /** The id Free WARP is selected by; it is not in the server list. */
+    /** The id Free WARP is selected by; it is not in the server list. A saved config is "warp:<its id>". */
     const val ID = "warp"
+    private const val SAVED = "warp:"
+
+    fun isWarp(id: String) = id == ID || id.startsWith(SAVED)
+
+    fun savedId(id: String): String? = id.takeIf { it.startsWith(SAVED) }?.removePrefix(SAVED)
+
+    fun selectionOf(config: WarpConfig) = SAVED + config.id
+
+    /** Every way "Find configs" tries, two-hop ones first since they take longest. */
+    val FIND = listOf(Method.GOOL, Method.MIM_H2, Method.H3, Method.H2, Method.H2_FRAGMENT, Method.H2_IPV6)
 
     /** Aether's WARP account, kept beside --config. Kept for good: Cloudflare limits new sign-ups. */
     const val IDENTITY_FILE = "aether-masque.toml"
@@ -63,14 +73,15 @@ object Warp {
     class Psiphon(val bin: String, val port: Int, val region: String?)
 
     /** One attempt's command line. Every question Aether could ask has a flag here, so it never waits for input. */
-    fun args(method: Method, port: Int, configFile: String, psiphon: Psiphon? = null, peer: String? = null): List<String> = buildList {
+    fun args(method: Method, port: Int, configFile: String, psiphon: Psiphon? = null, peer: String? = null, fresh: Boolean = false): List<String> = buildList {
         addAll(method.args)
         // A gateway that worked last time: no scan. For two hops it is the outer one.
         if (peer != null) addAll(listOf(if (method == Method.MIM_H2) "--mim-outer" else "--peer", peer))
         // Stop at the first gateway that passes real traffic; with two hops "verified" keeps them in separate ranges.
         add("--scan")
         add(if (method.twoHops) "verified" else "turbo")
-        add("--quick-reconnect")
+        // The last working gateway is shared by every method; "Find configs" ignores it so each proves its own.
+        add(if (fresh) "--no-quick-reconnect" else "--quick-reconnect")
         add("--bind")
         add("127.0.0.1:$port")
         add("--config")
@@ -161,6 +172,32 @@ object Warp {
             return out.toString("UTF-8")
         } finally {
             inflater.end()
+        }
+    }
+}
+
+/**
+ * A way through the network that "Find configs" proved: a method on one gateway, with how fast
+ * it was. Connecting to it skips the search, so it takes seconds.
+ */
+data class WarpConfig(
+    val id: String,
+    val method: Warp.Method,
+    val gateway: String,
+    val exit: String? = null,
+    val readyMs: Long = 0,
+    val down: Double? = null,
+) {
+    fun toJson(): org.json.JSONObject = org.json.JSONObject().put("id", id).put("method", method.name).put("gateway", gateway).put("readyMs", readyMs).also { o ->
+        exit?.let { o.put("exit", it) }
+        down?.let { o.put("down", it) }
+    }
+
+    companion object {
+        fun fromJson(o: org.json.JSONObject): WarpConfig? {
+            val method = Warp.Method.entries.firstOrNull { it.name == o.optString("method") } ?: return null
+            val gateway = o.optString("gateway").takeIf { Warp.isGateway(it) } ?: return null
+            return WarpConfig(o.optString("id").ifEmpty { return null }, method, gateway, o.optString("exit").ifEmpty { null }, o.optLong("readyMs"), if (o.has("down")) o.getDouble("down") else null)
         }
     }
 }

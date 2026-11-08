@@ -50,8 +50,38 @@ import com.google.zxing.qrcode.QRCodeWriter
 import io.github.m4hdisa.bridge.AppModel
 import io.github.m4hdisa.bridge.R
 import io.github.m4hdisa.bridge.Subscription
+import io.github.m4hdisa.bridge.Usage
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.rotate
 import io.github.m4hdisa.bridge.Warp
 import java.util.Locale
+
+/** The update button: it spins while that update runs, and can't be pressed again meanwhile. */
+@Composable
+fun RefreshAction(description: String, spinning: Boolean, onClick: () -> Unit) {
+    val turn = if (spinning) {
+        rememberInfiniteTransition(label = "spin").animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing)), label = "spin").value
+    } else {
+        0f
+    }
+    Box(
+        Modifier.size(36.dp).clip(ControlShape).clickable(enabled = !spinning, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.RefreshCw, description, Modifier.size(18.dp).rotate(turn), tint = if (spinning) Bridge.brand else Bridge.mutedForeground)
+    }
+}
+
+/** Traffic left, as the panel told it: from the total, or as a number on its own. */
+fun Usage.left(): Long? = when {
+    total > 0 -> (total - used).coerceAtLeast(0)
+    remaining > 0 -> remaining
+    else -> null
+}
 
 /** Free WARP on the Servers page: no config needed, a way through is found when connecting. */
 @Composable
@@ -110,6 +140,62 @@ fun WarpCard(model: AppModel) {
             ),
             style = MaterialTheme.typography.bodySmall,
         )
+
+        // Saved configs, as on Windows: found once, then a tap connects in seconds.
+        Spacer(Modifier.height(12.dp))
+        HorizontalDivider(color = Bridge.border)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.warp_saved_title), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(if (model.running) R.string.warp_find_disconnect else R.string.warp_find_hint), style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.width(10.dp))
+            OutlineButton(
+                stringResource(if (model.findingWarp) R.string.warp_finding else R.string.warp_find),
+                { model.findWarpConfigs() },
+                icon = Icons.Search,
+                enabled = !model.findingWarp && model.status == io.github.m4hdisa.bridge.VpnState.Status.Stopped,
+                height = 34.dp,
+            )
+        }
+        if (model.warpConfigs.isNotEmpty()) Spacer(Modifier.height(6.dp))
+        for (config in model.warpConfigs) WarpConfigRow(model, config, removable = true)
+    }
+}
+
+/** A saved WARP config: its method, gateway, exit and speed; a tap picks it. */
+@Composable
+fun WarpConfigRow(model: AppModel, config: io.github.m4hdisa.bridge.WarpConfig, removable: Boolean = false) {
+    val id = Warp.selectionOf(config)
+    val on = model.selected == id
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(ItemShape)
+            .background(if (on) Bridge.primary.copy(alpha = 0.14f) else Color.Transparent)
+            .clickable { model.select(id) }
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioMark(on)
+        Spacer(Modifier.width(10.dp))
+        FlagIcon(config.exit, width = 20.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.warp_config_name, config.method.label), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                listOfNotNull(config.exit?.let { countryName(it) }, config.gateway).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        config.down?.let {
+            Spacer(Modifier.width(6.dp))
+            Text("↓ " + stringResource(R.string.speed_mbps, mbpsText(it)), style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
+        }
+        if (removable) IconAction(Icons.Trash2, stringResource(R.string.remove), { model.removeWarpConfig(config) })
     }
 }
 
@@ -217,12 +303,13 @@ fun UsageStats(subscription: Subscription, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         val used = Formatter.formatShortFileSize(context, usage.used)
-        val traffic = if (usage.total > 0) stringResource(R.string.stat_traffic_of, used, Formatter.formatShortFileSize(context, usage.total)) else used
-        val note = if (usage.total > 0) {
-            stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, (usage.total - usage.used).coerceAtLeast(0)))
-        } else {
-            stringResource(R.string.stat_unlimited)
+        val traffic = when {
+            usage.total > 0 -> stringResource(R.string.stat_traffic_of, used, Formatter.formatShortFileSize(context, usage.total))
+            usage.remaining > 0 -> stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, usage.remaining))
+            else -> used
         }
+        val note = usage.left()?.takeIf { usage.total > 0 }?.let { stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, it)) }
+            ?: if (usage.remaining > 0) "" else stringResource(R.string.stat_unlimited)
         UsageStat(stringResource(R.string.stat_traffic), traffic, note, if (usage.total > 0 && usage.used >= usage.total) Bridge.destructive else null, Modifier.weight(1f))
         val ends = usage.expire * 1000
         val now = System.currentTimeMillis()

@@ -194,7 +194,7 @@
     <string name="stat_no_end">No end date</string>
     <string name="stat_ended">Ended</string>
     <string name="fake_ip">Fast DNS (FakeIP)</string>
-    <string name="fake_ip_hint">New sites open without waiting for an address lookup: the server looks it up itself. Turn it off if an app that works by IP address breaks.</string>
+    <string name="fake_ip_hint">New sites open without waiting for an address lookup. Off by default: some apps keep the made-up addresses after a reconnect and then load nothing for a while.</string>
     <string name="server_qr">Show QR code</string>
     <string name="qr_title">QR code</string>
     <string name="qr_hint">Scan it with Bridge, or another app, on another phone. It holds the server\'s password: show it only to people you trust.</string>
@@ -222,4 +222,17 @@
     <!-- 0.4.1 -->
     <string name="detailed_log">Detailed log</string>
     <string name="detailed_log_hint">Every connection goes in Logs, to find out why something doesn\'t load. Turn it off afterwards: it slows the phone a little.</string>
+
+    <!-- 0.4.2 -->
+    <string name="warp_find">Find configs</string>
+    <string name="warp_finding">Finding…</string>
+    <string name="warp_saved_title">Saved configs</string>
+    <string name="warp_find_hint">Tests every way through your network, measures each one\'s speed (about 5 MB each) and saves the ones that work, fastest first. A saved config connects in seconds.</string>
+    <string name="warp_find_disconnect">Disconnect first: configs are tested on your own network.</string>
+    <string name="warp_found">%1$d WARP configs found</string>
+    <string name="warp_found_none">No way through found on this network right now</string>
+    <string name="warp_config_name">WARP · %1$s</string>
+
+    <!-- 0.4.2 apps -->
+    <string name="apps_full_hint">Every app uses the VPN. Choose Per-App above to pick apps.</string>
 </resources>
