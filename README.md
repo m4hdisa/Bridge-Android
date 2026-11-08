@@ -2,15 +2,16 @@
 
 The Android version of [Bridge](https://github.com/m4hdisa/Bridge-app), in the same style as the Windows app. Download the APK from [Releases](https://github.com/m4hdisa/Bridge-Android/releases): `arm64-v8a` for almost every phone, `armeabi-v7a` for older ones.
 
-- **Dashboard:** the connect button; once connected, where your traffic leaves on a map (your country and the exit country, drawn inside the app; no map service is asked), with the exit IP, city, ping and live speed; every config in a box, with flag, country, ping and speed, one section for Free WARP and one for each subscription, each with its own update and test; and your subscriptions with their traffic and end date.
+- **Dashboard:** one screen that doesn't scroll: the connect button; where your traffic leaves on a map (your country and the exit country, drawn inside the app; no map service is asked), with the exit IP, city, ping, live speed and traffic used; and the chosen server, which opens the Servers page.
+- **Servers:** Free WARP and Auto on top, then a tab for each subscription, with its traffic, days left, update and test, and its configs fastest first. Search, a QR code, the link and removing a config are a tap away.
 - **Free WARP:** Cloudflare WARP with no server of your own, through [Aether](https://github.com/CluvexStudio/Aether)'s official Android build (Android 10 and up). The fast ways through your network are tried at once and the first that works wins. "Exit outside Iran" also waits for the two-hop ways; "WARP + Psiphon" carries Psiphon inside WARP for an exit in another country. When Cloudflare's sign-up is blocked, a starter account from Bridge's daily list connects first and your own account is then made through it.
 - **Links:** vless://, vmess://, trojan://, ss://, hysteria2:// and tuic://, subscriptions (including a BPB panel's own address), JSON config files from Xray, sing-box and Clash, and QR codes (scan with the camera, or show a config's QR code).
 - **Xray** for the links sing-box can't run: xhttp, VLESS Encryption, TCP with HTTP camouflage, mKCP and fragmenting. sing-box stays in charge of the VPN and reaches those servers through the official Xray, which runs beside it as on Windows.
-- **Fast DNS (FakeIP):** a new site gets an instant made-up address and the server looks the real one up, so it opens without waiting. Iran's address for blocked sites (10.10.34.x) is refused at once. It can be turned off in Settings.
+- **Fast DNS (FakeIP):** a new site gets an instant made-up address and the server looks the real one up, so it opens without waiting. Off by default, since some apps keep the made-up addresses after a reconnect; it can be turned on in Settings. Iran's address for blocked sites (10.10.34.x) is always refused at once.
 - **Auto:** picks the fastest working server and keeps checking. Switching servers while connected needs no reconnect.
 - **Full VPN** by default; **Per-App** (only the apps you choose) in Settings, done by Android itself.
 - **Iranian sites skip the VPN**, with the same lists as on Windows ([Chocolate4U/Iran-sing-box-rules](https://github.com/Chocolate4U/Iran-sing-box-rules)).
-- A quick settings tile, a speed test, free public configs from Bridge's daily list ([Bridge-configs](https://github.com/m4hdisa/Bridge-configs)) with a warning first, the log of every core, Persian and English.
+- A quick settings tile, free public configs from Bridge's daily list ([Bridge-configs](https://github.com/m4hdisa/Bridge-configs)) with a warning first, the log of every core with its errors and warnings a tap away, Persian and English.
 
 Bridge's own requests (subscriptions, measuring, Xray's and Aether's connections) stay outside the VPN. When a list is blocked, Bridge fetches it through the VPN's local proxy, which only Bridge can use (it has a random password for each connection); Xray's local ports have one too.
 

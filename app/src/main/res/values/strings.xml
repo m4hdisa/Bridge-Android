@@ -177,15 +177,8 @@
     <string name="progress_warp_foreign">Found a way. Waiting a little longer for an exit outside Iran</string>
     <string name="progress_psiphon">Connecting Psiphon through WARP for an exit outside Iran</string>
     <string name="progress_starting">Starting the connection</string>
-    <string name="speed_title">Speed</string>
     <string name="speed_down">Download</string>
     <string name="speed_up">Upload</string>
-    <string name="speed_total">This connection: %1$s down, %2$s up</string>
-    <string name="speed_test">Test speed</string>
-    <string name="speed_testing">Testing…</string>
-    <string name="speed_mbps">%1$s Mbps</string>
-    <string name="speed_failed">The speed test didn\'t get through.</string>
-    <string name="speed_test_hint">Up to 70 MB through the VPN, from Cloudflare.</string>
     <string name="stat_traffic">Traffic</string>
     <string name="stat_traffic_of">%1$s of %2$s</string>
     <string name="stat_traffic_left">%1$s left</string>
@@ -223,20 +216,42 @@
     <string name="detailed_log">Detailed log</string>
     <string name="detailed_log_hint">Every connection goes in Logs, to find out why something doesn\'t load. Turn it off afterwards: it slows the phone a little.</string>
 
-    <!-- 0.4.2 -->
-    <string name="warp_find">Find configs</string>
-    <string name="warp_finding">Finding…</string>
-    <string name="warp_saved_title">Saved configs</string>
-    <string name="warp_find_hint">Tests every way through your network, measures each one\'s speed (about 5 MB each) and saves the ones that work, fastest first. A saved config connects in seconds.</string>
-    <string name="warp_find_disconnect">Disconnect first: configs are tested on your own network.</string>
-    <string name="warp_found">%1$d WARP configs found</string>
-    <string name="warp_found_none">No way through found on this network right now</string>
-    <string name="warp_config_name">WARP · %1$s</string>
-
     <!-- 0.4.2 apps -->
     <string name="apps_full_hint">Every app uses the VPN. Choose Per-App above to pick apps.</string>
 
     <!-- 0.4.3 -->
     <string name="show_all">Show all %1$d</string>
     <string name="show_less">Show fewer</string>
+
+    <!-- 0.4.4: the new screens -->
+    <string name="used">Used</string>
+    <string name="could_not_connect">Couldn\'t connect</string>
+    <string name="status_off_empty">Add a server to start</string>
+    <string name="tap_to_add">Tap to add one</string>
+    <string name="usage_short">%1$s left, %2$d days</string>
+    <string name="left_of">left of %1$s</string>
+    <string name="left_only">left</string>
+    <string name="days_left_label">days left</string>
+    <string name="responding">%1$d of %2$d responding.</string>
+    <string name="updated_when">Updated %1$s.</string>
+    <string name="filter_all">All</string>
+    <string name="filter_errors">Errors</string>
+    <string name="filter_warnings">Warnings</string>
+    <string name="latest">Latest</string>
+    <string name="manual_short">Manual</string>
+    <string name="public_short">Public</string>
+    <string name="search_configs">Search configs</string>
+    <string name="no_configs_match">No configs match</string>
+    <string name="no_configs_match_hint">Try a name, a country or a protocol.</string>
+    <string name="tap_again_remove">Tap again to remove</string>
+    <string name="remove_subscription">Remove subscription</string>
+    <string name="remove_all">Remove all</string>
+    <string name="protocol">Protocol</string>
+    <string name="country">Country</string>
+    <string name="ping">Ping</string>
+    <string name="source">Source</string>
+    <string name="address">Address</string>
+    <string name="apps_every">Every app</string>
+    <string name="licenses">Open-source licenses</string>
+    <string name="back">Back</string>
 </resources>

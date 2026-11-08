@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -77,26 +78,78 @@ fun BridgeCard(modifier: Modifier = Modifier, padding: PaddingValues = PaddingVa
     }
 }
 
-/** A page's title and what it is for. */
+/** Every page's header, in the same place: a blue tile with the page's icon, its title, and its actions. */
 @Composable
-fun PageHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
-    Column(modifier.padding(top = 8.dp, bottom = 4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineLarge)
-        if (subtitle != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Bridge.mutedForeground)
+fun AppHeader(title: String, tile: @Composable () -> Unit, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        tile()
+        Spacer(Modifier.width(10.dp))
+        Text(title, style = HeaderTitle, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // The last icon's own padding lines its glyph up with the edge of the cards.
+        Row(Modifier.offset(x = headerEdge()), verticalAlignment = Alignment.CenterVertically, content = actions)
+    }
+}
+
+private val HeaderTitle @Composable get() = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp, lineHeight = 26.sp)
+
+@Composable
+private fun headerEdge(): Dp = if (LocalLayoutDirection.current == LayoutDirection.Rtl) (-10).dp else 10.dp
+
+/** The tile at the start of a header. */
+@Composable
+fun HeaderTile(icon: ImageVector) {
+    Box(Modifier.size(36.dp).clip(ControlShape).background(Bridge.primary), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(24.dp), tint = Bridge.primaryForeground)
+    }
+}
+
+/** An icon in a header: always the same size and color. */
+@Composable
+fun HeaderAction(icon: ImageVector, contentDescription: String, onClick: () -> Unit, enabled: Boolean = true) =
+    IconAction(icon, contentDescription, onClick, tint = Bridge.foreground, enabled = enabled)
+
+/** A filter or source above a list: a pill in a row tall enough for a finger. */
+@Composable
+fun ChipTab(label: String, count: Int?, on: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(52.dp)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier
+                .height(38.dp)
+                .clip(CircleShape)
+                .background(if (on) Bridge.primary.copy(alpha = 0.2f) else Bridge.card)
+                .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.45f) else Bridge.border, CircleShape)
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val ink = if (on) Bridge.brand else Bridge.mutedForeground
+            Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1)
+            if (count != null) {
+                Spacer(Modifier.width(6.dp))
+                Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = ink.copy(alpha = 0.75f))
+            }
         }
     }
 }
 
-/** A small label above a group, with an optional link on the other side. */
+/** The moving light of a skeleton, while a list or a ping is being loaded. */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
-    Row(modifier.fillMaxWidth().padding(top = 18.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, style = MaterialTheme.typography.labelLarge, color = Bridge.mutedForeground, modifier = Modifier.weight(1f))
-        trailing?.invoke()
-    }
+fun shimmer(base: Color = Bridge.muted, light: Color = Color(0xFF343434)): Brush {
+    val x = rememberInfiniteTransition(label = "shimmer").animateFloat(-400f, 800f, infiniteRepeatable(tween(1100, easing = androidx.compose.animation.core.LinearEasing)), label = "shimmer").value
+    return Brush.linearGradient(listOf(base, light, base), start = Offset(x, 0f), end = Offset(x + 400f, 0f))
 }
+
+/** A small button filled with the muted color, or the logo blue for the page's main action. */
+@Composable
+fun FillButton(text: String, icon: ImageVector?, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true) =
+    ButtonBase(text, icon, onClick, modifier, enabled, if (primary) Bridge.primary else Bridge.muted, if (primary) Bridge.primaryForeground else Bridge.foreground, null, 48.dp, ItemShape)
+
+/** Mirrors a drawing left to right. */
+fun Modifier.mirrored(): Modifier = this.scale(scaleX = -1f, scaleY = 1f)
 
 /** An icon that points somewhere (arrows, chevrons): mirrored when the screen reads right to left. */
 @Composable
@@ -152,6 +205,7 @@ private fun ButtonBase(
     ink: Color,
     border: Color?,
     height: Dp,
+    shape: androidx.compose.ui.graphics.Shape = ControlShape,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -159,9 +213,9 @@ private fun ButtonBase(
         modifier
             .height(height)
             .scale(if (pressed) 0.98f else 1f)
-            .clip(ControlShape)
+            .clip(shape)
             .background(fill)
-            .then(if (border != null) Modifier.border(1.dp, border, ControlShape) else Modifier)
+            .then(if (border != null) Modifier.border(1.dp, border, shape) else Modifier)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.5f)
             .padding(horizontal = 14.dp),
@@ -186,23 +240,23 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
 fun OutlineButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, height: Dp = 40.dp) =
     ButtonBase(text, icon, onClick, modifier, enabled, Color(0x08FFFFFF), Bridge.foreground, Bridge.input, height)
 
-/** An icon on its own, for small actions on a card. */
+/** An icon on its own: 48 dp to touch, whatever it looks like. */
 @Composable
 fun IconAction(icon: ImageVector, contentDescription: String, onClick: () -> Unit, modifier: Modifier = Modifier, tint: Color = Bridge.mutedForeground, enabled: Boolean = true) {
     Box(
         modifier
-            .size(36.dp)
-            .clip(ControlShape)
+            .size(48.dp)
+            .clip(ItemShape)
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else 0.4f),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription, Modifier.size(18.dp), tint = tint)
+        Icon(icon, contentDescription, Modifier.size(22.dp), tint = tint)
     }
 }
 
 @Composable
-fun BridgeSwitch(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun BridgeSwitch(checked: Boolean, onChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier) {
     Switch(
         checked = checked,
         onCheckedChange = onChange,
@@ -218,33 +272,33 @@ fun BridgeSwitch(checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifi
     )
 }
 
-/** Choices side by side in a frame; the chosen one filled with the logo blue (the dashboard's Mode). */
+/** Choices side by side, the chosen one raised. */
 @Composable
 fun <T> Segmented(options: List<Triple<T, String, ImageVector>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
-            .clip(CardShape)
-            .background(Bridge.card)
-            .border(1.dp, Bridge.border, CardShape)
+            .clip(ItemShape)
+            .background(Bridge.muted)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         for ((value, label, icon) in options) {
             val on = value == selected
+            val ink = if (on) Bridge.foreground else Bridge.mutedForeground
             Row(
                 Modifier
                     .weight(1f)
-                    .height(40.dp)
-                    .clip(ItemShape)
-                    .background(if (on) Bridge.primary else Color.Transparent)
+                    .height(48.dp)
+                    .clip(ControlShape)
+                    .background(if (on) Bridge.sidebarAccent else Color.Transparent)
                     .clickable { onSelect(value) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(icon, null, Modifier.size(16.dp), tint = if (on) Bridge.primaryForeground else Bridge.mutedForeground)
-                Spacer(Modifier.width(8.dp))
-                Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) Bridge.primaryForeground else Bridge.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(icon, null, Modifier.size(18.dp), tint = ink)
+                Spacer(Modifier.width(7.dp))
+                Text(label, style = MaterialTheme.typography.labelLarge, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -283,6 +337,7 @@ fun SettingRow(icon: ImageVector?, title: String, subtitle: String?, modifier: M
         modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clip(ItemShape).clickable(onClick = onClick) else Modifier)
+            .heightIn(min = 56.dp)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -310,7 +365,19 @@ enum class KeyState { Off, Busy, On }
  * still blue light behind it all.
  */
 @Composable
-fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ConnectKey(
+    state: KeyState,
+    label: String,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    side: Dp = 224.dp,
+    icon: ImageVector = Icons.Power,
+    note: String? = null,
+) {
+    // Everything scales with the room the page has.
+    val k = side.value / 224f
     val on = state == KeyState.On
     val busy = state == KeyState.Busy
     val interaction = remember { MutableInteractionSource() }
@@ -323,7 +390,7 @@ fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabl
     val deep = Color(0xFF0230B0)
     Box(
         modifier
-            .size(172.dp)
+            .size(side)
             .drawBehind {
                 // The still blue light behind it, on only; it fades to nothing well inside the box.
                 if (glow > 0f) drawCircle(Brush.radialGradient(listOf(Bridge.primary.copy(alpha = 0.3f * glow), Color.Transparent), radius = size.minDimension / 2), radius = size.minDimension / 2)
@@ -333,13 +400,13 @@ fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabl
         // The bezel: a ring with a small gap around the button.
         Box(
             Modifier
-                .size(152.dp)
+                .size(200.dp * k)
                 .clip(CircleShape)
                 .background(if (on) Bridge.primary.copy(alpha = 0.10f) else Color(0x99141414))
                 .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.3f) else Color(0x12FFFFFF), CircleShape),
         )
         if (busy) {
-            androidx.compose.foundation.Canvas(Modifier.size(152.dp)) {
+            androidx.compose.foundation.Canvas(Modifier.size(200.dp * k)) {
                 val w = 1.5.dp.toPx()
                 drawArc(
                     Bridge.brand,
@@ -354,7 +421,7 @@ fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabl
         }
         Column(
             Modifier
-                .size(124.dp)
+                .size(164.dp * k)
                 .scale(if (pressed) 0.97f else 1f)
                 .shadow(if (on) 18.dp else 10.dp, CircleShape, ambientColor = if (on) Bridge.primary else Color.Black, spotColor = if (on) Bridge.primary else Color.Black)
                 .clip(CircleShape)
@@ -393,9 +460,13 @@ fun ConnectKey(state: KeyState, label: String, contentDescription: String, enabl
                 busy -> Bridge.brand
                 else -> Bridge.mutedForeground
             }
-            Icon(Icons.Power, contentDescription, Modifier.size(34.dp), tint = ink)
-            Spacer(Modifier.height(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp), color = ink)
+            Icon(icon, contentDescription, Modifier.size(46.dp * k), tint = ink)
+            Spacer(Modifier.height(6.dp * k))
+            Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = (15 * k).sp, lineHeight = (19 * k).sp), color = ink, maxLines = 1)
+            if (note != null) {
+                Spacer(Modifier.height(3.dp * k))
+                Text(note, style = MaterialTheme.typography.bodySmall.copy(fontFamily = GeistMono, fontSize = (13 * k).sp, lineHeight = (16 * k).sp), color = ink.copy(alpha = 0.85f), maxLines = 1)
+            }
         }
     }
 }

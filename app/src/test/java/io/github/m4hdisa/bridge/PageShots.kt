@@ -79,7 +79,6 @@ class PageShots {
                     Health(Health.State.Ok, 84, "203.0.113.24", "DE", "Frankfurt am Main", 50.1 to 8.7),
                     "IR",
                     Traffic(808_000, 22_500, 412_000_000, 18_300_000),
-                    SpeedResult(down = 48.3, up = 12.6),
                 )
             }
             shadowOf(Looper.getMainLooper()).idle()
@@ -105,10 +104,10 @@ class PageShots {
     }
 
     @Test
-    @Config(qualifiers = "en-w400dp-h1500dp-xxhdpi")
+    @Config(qualifiers = "en-w400dp-h840dp-xxhdpi")
     fun english() = shoot("en")
 
     @Test
-    @Config(qualifiers = "fa-w400dp-h1500dp-xxhdpi")
+    @Config(qualifiers = "fa-w400dp-h840dp-xxhdpi")
     fun persian() = shoot("fa")
 }

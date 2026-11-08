@@ -86,60 +86,6 @@ object Net {
         return ssl
     }
 
-    private const val SPEED_HOST = "https://speed.cloudflare.com"
-    private const val SPEED_NANOS = 8_000_000_000L
-
-    /** Download speed through the VPN in Mbps: as much of 50 MB as comes in 8 seconds. */
-    fun downloadSpeed(proxy: LocalAccess): Double {
-        val url = URL("$SPEED_HOST/__down?bytes=50000000")
-        val socket = Socket()
-        try {
-            val stream = open(socket, proxy, url, 15_000)
-            write(stream.getOutputStream(), "GET ${url.path}?${url.query} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: $USER_AGENT\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
-            val input = stream.getInputStream()
-            val status = readLine(input)
-            if (status.split(' ').getOrNull(1) != "200") throw IOException("the speed test answered: $status")
-            while (readLine(input).isNotEmpty()) Unit
-            val buffer = ByteArray(64 * 1024)
-            val started = System.nanoTime()
-            var bytes = 0L
-            while (System.nanoTime() - started < SPEED_NANOS) {
-                val n = input.read(buffer)
-                if (n < 0) break
-                bytes += n
-            }
-            return mbps(bytes, System.nanoTime() - started)
-        } finally {
-            runCatching { socket.close() }
-        }
-    }
-
-    /** Upload speed through the VPN in Mbps: as much of 20 MB as goes out in 8 seconds. */
-    fun uploadSpeed(proxy: LocalAccess): Double {
-        val url = URL("$SPEED_HOST/__up")
-        val size = 20_000_000L
-        val socket = Socket()
-        try {
-            val stream = open(socket, proxy, url, 15_000)
-            val out = stream.getOutputStream()
-            write(out, "POST ${url.path} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: $USER_AGENT\r\nContent-Type: application/octet-stream\r\nContent-Length: $size\r\nConnection: close\r\n\r\n")
-            val chunk = ByteArray(64 * 1024)
-            val started = System.nanoTime()
-            var sent = 0L
-            while (sent < size && System.nanoTime() - started < SPEED_NANOS) {
-                val n = minOf(chunk.size.toLong(), size - sent).toInt()
-                out.write(chunk, 0, n)
-                sent += n
-            }
-            out.flush()
-            return mbps(sent, System.nanoTime() - started)
-        } finally {
-            runCatching { socket.close() }
-        }
-    }
-
-    private fun mbps(bytes: Long, nanos: Long): Double = if (nanos <= 0) 0.0 else bytes * 8.0 / (nanos / 1e9) / 1e6
-
     private fun readResponse(input: InputStream): Page {
         val status = readLine(input)
         val code = status.split(' ').getOrNull(1)?.toIntOrNull() ?: throw IOException("not an HTTP answer")

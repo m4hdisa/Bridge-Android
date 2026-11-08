@@ -19,7 +19,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -31,10 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -50,7 +46,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,24 +60,21 @@ import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import io.github.m4hdisa.bridge.ui.AddServersSheetContent
+import io.github.m4hdisa.bridge.ui.AppsPage
 import io.github.m4hdisa.bridge.ui.Bridge
 import io.github.m4hdisa.bridge.ui.BridgeTheme
 import io.github.m4hdisa.bridge.ui.BusyBar
+import io.github.m4hdisa.bridge.ui.ConnectedLight
 import io.github.m4hdisa.bridge.ui.EnterLinkDialog
 import io.github.m4hdisa.bridge.ui.HomeScreen
 import io.github.m4hdisa.bridge.ui.Icons
 import io.github.m4hdisa.bridge.ui.ItemShape
-import io.github.m4hdisa.bridge.ui.LogoMark
+import io.github.m4hdisa.bridge.ui.LogsPage
 import io.github.m4hdisa.bridge.ui.PublicConfigsDialog
-import io.github.m4hdisa.bridge.ui.ServerPickerContent
-import io.github.m4hdisa.bridge.ui.StatusDot
-import io.github.m4hdisa.bridge.ui.appsPage
-import io.github.m4hdisa.bridge.ui.logsPage
-import io.github.m4hdisa.bridge.ui.serversPage
-import io.github.m4hdisa.bridge.ui.settingsPage
+import io.github.m4hdisa.bridge.ui.ServersPage
+import io.github.m4hdisa.bridge.ui.SettingsPage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 enum class Screen { Home, Servers, Apps, Logs, Settings }
@@ -180,9 +172,7 @@ class MainActivity : AppCompatActivity() {
 private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, onConnect: () -> Unit, onScan: () -> Unit) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
     var addSheet by remember { mutableStateOf(false) }
-    var pickSheet by remember { mutableStateOf(false) }
     var enterDialog by remember { mutableStateOf(false) }
     var publicDialog by remember { mutableStateOf(false) }
     var appFilter by rememberSaveable { mutableStateOf("") }
@@ -222,27 +212,21 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
         },
         bottomBar = { NavBar(page, onPage) },
     ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
-            // No top bar: the dashboard says how the connection is under its button, and Settings has the version.
-            Spacer(Modifier.statusBarsPadding().height(8.dp))
-            model.busy?.let { BusyBar(stringResource(it), Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
-            val list = rememberLazyListState()
-            LaunchedEffect(page) { list.scrollToItem(0) }
-            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp)) {
+        Box(Modifier.fillMaxSize()) {
+            ConnectedLight(model.running && page == Screen.Home)
+            Column(Modifier.fillMaxSize().padding(inner)) {
+                Spacer(Modifier.statusBarsPadding().height(8.dp))
+                // Tests and updates show in their own lists; only the long search for public configs has a bar.
+                model.busy?.takeIf { it == R.string.public_downloading || it == R.string.public_testing }?.let {
+                    BusyBar(stringResource(it), Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                }
+                // Each page lays itself out: the dashboard fits the screen, the others scroll what they need to.
                 when (page) {
-                    Screen.Home -> item {
-                        HomeScreen(
-                            model,
-                            onConnect = onConnect,
-                            onOpenServers = { onPage(Screen.Servers) },
-                            onOpenApps = { onPage(Screen.Apps) },
-                            onAdd = { addSheet = true },
-                        )
-                    }
-                    Screen.Servers -> serversPage(model, onAdd = { addSheet = true }, onPublic = { publicDialog = true })
-                    Screen.Apps -> appsPage(model, appFilter) { appFilter = it }
-                    Screen.Logs -> logsPage(log)
-                    Screen.Settings -> settingsPage(model, onOpenApps = { onPage(Screen.Apps) })
+                    Screen.Home -> HomeScreen(model, onConnect = onConnect, onOpenServers = { onPage(Screen.Servers) }, onAdd = { addSheet = true })
+                    Screen.Servers -> ServersPage(model, onAdd = { addSheet = true }, onPublic = { publicDialog = true }, onPicked = { onPage(Screen.Home) })
+                    Screen.Apps -> AppsPage(model, appFilter, { appFilter = it }, onBack = { onPage(Screen.Settings) })
+                    Screen.Logs -> LogsPage(log)
+                    Screen.Settings -> SettingsPage(model, onOpenApps = { onPage(Screen.Apps) })
                 }
             }
         }
@@ -251,16 +235,6 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
     if (addSheet) {
         ModalBottomSheet(onDismissRequest = { addSheet = false }, sheetState = rememberModalBottomSheetState(), containerColor = Bridge.popover) {
             AddServersSheetContent(model, onDone = { addSheet = false }, onEnter = { enterDialog = true }, onPublic = { publicDialog = true }, onScan = onScan)
-        }
-    }
-    if (pickSheet) {
-        val state = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-        ModalBottomSheet(onDismissRequest = { pickSheet = false }, sheetState = state, containerColor = Bridge.popover) {
-            ServerPickerContent(
-                model,
-                onDone = { scope.launch { state.hide() }.invokeOnCompletion { pickSheet = false } },
-                onManage = { onPage(Screen.Servers) },
-            )
         }
     }
     if (enterDialog) {
@@ -290,33 +264,34 @@ private fun NavBar(page: Screen, onPage: (Screen) -> Unit) {
         Triple(Screen.Settings, R.string.nav_settings, Icons.GearSix to Icons.GearSixFill),
     )
     val current = if (page == Screen.Apps) Screen.Settings else page
-    val pill = androidx.compose.foundation.shape.RoundedCornerShape(26.dp)
-    // A floating bar: the chosen page grows into a lit pill with its name; the others are icons.
-    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 10.dp)) {
+    val pill = androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
+    // A floating bar as wide as what's in it: the chosen page grows into a lit pill with its name; the others are icons.
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
         Row(
             Modifier
-                .fillMaxWidth()
                 .shadow(18.dp, pill, ambientColor = androidx.compose.ui.graphics.Color.Black, spotColor = androidx.compose.ui.graphics.Color.Black)
                 .clip(pill)
                 .background(Bridge.card)
                 .border(1.dp, Bridge.border, pill)
                 .padding(6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             for ((target, label, icons) in items) {
                 val on = current == target
                 Row(
                     Modifier
-                        .height(44.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(22.dp))
-                        .background(if (on) Bridge.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+                        .height(50.dp)
+                        .then(if (on) Modifier else Modifier.width(60.dp))
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(25.dp))
+                        .background(if (on) Bridge.primary.copy(alpha = 0.2f) else androidx.compose.ui.graphics.Color.Transparent)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPage(target) }
                         .animateContentSize()
-                        .padding(horizontal = if (on) 16.dp else 14.dp),
+                        .padding(horizontal = if (on) 16.dp else 0.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
                 ) {
-                    Icon(if (on) icons.second else icons.first, stringResource(label), Modifier.size(20.dp), tint = if (on) Bridge.brand else Bridge.mutedForeground)
+                    Icon(if (on) icons.second else icons.first, stringResource(label), Modifier.size(24.dp), tint = if (on) Bridge.brand else Bridge.mutedForeground)
                     if (on) {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(label), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = Bridge.brand, maxLines = 1)

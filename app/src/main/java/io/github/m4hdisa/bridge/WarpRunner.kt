@@ -106,90 +106,6 @@ class WarpRunner(private val context: Context, private val log: File) {
         return won.psiphonPort ?: won.port
     }
 
-    /**
-     * Connects to a saved config: its method on its gateway, without a search. If that gateway
-     * doesn't work any more, every way is tried as usual and the config gets the new gateway.
-     */
-    fun startSaved(config: WarpConfig, progress: (Int) -> Unit, onDied: () -> Unit, newGateway: (String) -> Unit): Int {
-        if (!available) throw WarpException(R.string.warp_unavailable, "Free WARP needs Android 10 or newer")
-        dir.mkdirs()
-        ensureAccount(progress)
-        note("Free WARP: connecting with ${config.method.label} on the saved gateway ${config.gateway}")
-        val won = try {
-            race(listOf(config.method), false, false, null, progress, config.gateway, SAVED_MS)
-        } catch (e: WarpException) {
-            note("Free WARP: the saved gateway didn't answer; looking for another")
-            race(listOf(config.method) + Warp.methods(Warp.Choice.Auto).filter { it != config.method }, false, false, null, progress)
-        }
-        won.gateway?.takeIf { it != config.gateway && won.method == config.method }?.let(newGateway)
-        return keep(won, onDied)
-    }
-
-    /**
-     * "Find configs": every way at once on the phone's own network (Bridge must be disconnected).
-     * Each one that carries traffic is kept with its gateway, exit country and download speed,
-     * measured one at a time so they don't share the line. Each tunnel stops once measured.
-     */
-    fun find(progress: (Int) -> Unit): List<WarpConfig> {
-        if (!available) throw WarpException(R.string.warp_unavailable, "Free WARP needs Android 10 or newer")
-        dir.mkdirs()
-        ensureAccount(progress)
-        progress(R.string.progress_warp_search)
-        note("Free WARP: finding configs (${Warp.FIND.joinToString { it.label }})")
-        val found = java.util.Collections.synchronizedList(mutableListOf<WarpConfig>())
-        val speedTurn = Any()
-        val threads = Warp.FIND.map { method ->
-            Thread {
-                val port = freePort()
-                var gateway: String? = null
-                val ready = java.util.concurrent.CountDownLatch(1)
-                val started = System.currentTimeMillis()
-                val process = launch(Warp.args(method, port, config, fresh = true), "find ${method.name.lowercase()}") { _, text ->
-                    if (gateway == null) gateway = Warp.gateway(text)
-                    Warp.exitCountry(text)?.let { exit = it }
-                    if (Warp.ready(text, port)) ready.countDown()
-                }
-                try {
-                    if (!ready.await(FIND_MS, TimeUnit.MILLISECONDS) || cancelled) return@Thread
-                    val readyMs = System.currentTimeMillis() - started
-                    val country = runCatching { traceCountry(port) }.getOrNull()
-                    val down = synchronized(speedTurn) { runCatching { socksSpeed(port) }.getOrNull() }
-                    val g = gateway ?: return@Thread
-                    found += WarpConfig(UUID.randomUUID().toString().take(8), method, g, country, readyMs, down)
-                    note("Free WARP: ${method.label} works on $g${country?.let { ", exit $it" } ?: ""} (${readyMs / 1000.0} s, down ${down?.let { "%.1f".format(it) } ?: "?"} Mbps)")
-                } finally {
-                    process.destroy()
-                    processes -= process
-                }
-            }.apply { isDaemon = true; start() }
-        }
-        threads.forEach { it.join(FIND_MS + 40_000) }
-        stop()
-        // Fastest first; the same gateway once per method.
-        return found.toList().distinctBy { it.method to it.gateway }.sortedByDescending { it.down ?: 0.0 }
-    }
-
-    /** Download speed through a local SOCKS port, in Mbps: as much of 5 MB as comes in 6 seconds. */
-    private fun socksSpeed(port: Int): Double {
-        val connection = URL("https://speed.cloudflare.com/__down?bytes=5000000").openConnection(Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", port))) as HttpsURLConnection
-        try {
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 8_000
-            val input = connection.inputStream
-            val buffer = ByteArray(64 * 1024)
-            val started = System.nanoTime()
-            var bytes = 0L
-            while (System.nanoTime() - started < 6_000_000_000L) {
-                val n = input.read(buffer)
-                if (n < 0) break
-                bytes += n
-            }
-            return bytes * 8.0 / ((System.nanoTime() - started) / 1e9) / 1e6
-        } finally {
-            connection.disconnect()
-        }
-    }
-
     /** Stops every Aether this runner started (each stops its own Psiphon). */
     fun stop() {
         cancelled = true
@@ -448,8 +364,6 @@ class WarpRunner(private val context: Context, private val log: File) {
         private const val STATE_FILE = "bridge-warp-state"
         private const val LAST_WAY_FILE = "bridge-warp-last"
         private const val QUICK_MS = 20_000L
-        private const val SAVED_MS = 25_000L
-        private const val FIND_MS = 60_000L
         private val ACCOUNT_LOCK = Any()
         private const val TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
         private const val ATTEMPT_MS = 75_000L

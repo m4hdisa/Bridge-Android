@@ -34,9 +34,6 @@ data class Exit(val ip: String, val country: String, val city: String?, val at: 
 /** Traffic through the VPN: bytes a second now, and in all since connecting. */
 data class Traffic(val down: Long = 0, val up: Long = 0, val totalDown: Long = 0, val totalUp: Long = 0)
 
-/** A speed test through the VPN, in Mbps; null while not measured yet. */
-data class SpeedResult(val running: Boolean = false, val down: Double? = null, val up: Double? = null, val failed: Boolean = false)
-
 /** The last real request through the VPN, repeated while connected (the dashboard's connection check). */
 data class Health(
     val state: State = State.Idle,
@@ -88,13 +85,6 @@ class AppModel(context: Context) {
     var psiphonRegion by mutableStateOf(store.psiphonRegion)
         private set
 
-    var warpConfigs by mutableStateOf(store.warpConfigs)
-        private set
-
-    /** "Find configs" is running. */
-    var findingWarp by mutableStateOf(false)
-        private set
-
     /** Free WARP can run on this phone (Android 10 and up, and a build that has Aether). */
     val warpAvailable = WarpRunner.isAvailable(app)
 
@@ -102,8 +92,6 @@ class AppModel(context: Context) {
     var progress by mutableStateOf(VpnState.progress)
         private set
     var traffic by mutableStateOf(Traffic())
-        private set
-    var speed by mutableStateOf(SpeedResult())
         private set
 
     /** The phone's own country, outside the VPN (Cloudflare's answer), for the map. */
@@ -122,7 +110,11 @@ class AppModel(context: Context) {
     var busy by mutableStateOf<Int?>(null)
         private set
 
-    /** Subscriptions being updated now, by id; their update buttons spin. */
+    /** Servers being measured now, by id; their delays show a moving placeholder. */
+    var measuring by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Subscriptions being updated now, by id; their lists show moving placeholders. */
     var updating by mutableStateOf<Set<String>>(emptySet())
         private set
     private var busyCount = 0
@@ -143,6 +135,7 @@ class AppModel(context: Context) {
     init {
         VpnState.addListener(stateListener)
         onVpnState()
+        findHome()
     }
 
     fun close() {
@@ -164,6 +157,12 @@ class AppModel(context: Context) {
 
     fun messageShown(m: Message) {
         if (message?.id == m.id) message = null
+    }
+
+    /** Takes the failed connection's message off the dashboard. */
+    fun clearError() {
+        vpnError = null
+        localError = null
     }
 
     private fun markBusy(@StringRes text: Int?) {
@@ -201,7 +200,6 @@ class AppModel(context: Context) {
             healthRound++
             health = Health()
             traffic = Traffic()
-            speed = SpeedResult()
         }
     }
 
@@ -319,30 +317,10 @@ class AppModel(context: Context) {
     }
 
     /** For PageShots only: how a working connection looks, without a VPN. */
-    internal fun pretend(health: Health, home: String, traffic: Traffic, speed: SpeedResult) {
+    internal fun pretend(health: Health, home: String, traffic: Traffic) {
         this.health = health
         homeCountry = home
         this.traffic = traffic
-        this.speed = speed
-    }
-
-    /** Downloads and uploads through the VPN for a few seconds each. */
-    fun testSpeed() {
-        val session = VpnState.session?.takeIf { running } ?: return
-        if (speed.running) return
-        speed = SpeedResult(running = true)
-        work.execute {
-            val down = runCatching { Net.downloadSpeed(session.proxy) }.getOrNull()
-            // Remembered on the config it went through, for the server list.
-            val id = Clash.current(session.clash)?.let { session.idOf(it) }
-            if (down != null && id != null && id != AUTO && id != Warp.ID) store.update(id) { it.copy(speed = down) }
-            ui {
-                speed = speed.copy(down = down)
-                servers = store.servers
-            }
-            val up = runCatching { Net.uploadSpeed(session.proxy) }.getOrNull()
-            ui { speed = SpeedResult(false, down, up, down == null && up == null) }
-        }
     }
 
     /**
@@ -421,33 +399,6 @@ class AppModel(context: Context) {
     val autoSelected get() = servers.size > 1 && selected != Warp.ID && servers.none { it.id == selected }
 
     val warpSelected get() = Warp.isWarp(selected)
-
-    /** Tests every WARP way on the phone's own network and saves the ones that work, fastest first. */
-    fun findWarpConfigs() {
-        if (findingWarp || !warpAvailable) return
-        if (status != VpnState.Status.Stopped) return say(R.string.warp_find_disconnect)
-        findingWarp = true
-        markBusy(R.string.progress_warp_search)
-        work.execute {
-            val result = runCatching {
-                WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).find { res -> ui { busy = res } }
-            }
-            result.onSuccess { found -> if (found.isNotEmpty()) store.warpConfigs = found }
-            ui {
-                findingWarp = false
-                markBusy(null)
-                warpConfigs = store.warpConfigs
-                result.onSuccess { if (it.isEmpty()) say(R.string.warp_found_none) else say(R.string.warp_found, it.size) }
-                    .onFailure { e -> if (e is WarpException) say(e.res) else say(R.string.warp_found_none) }
-            }
-        }
-    }
-
-    fun removeWarpConfig(config: WarpConfig) {
-        store.warpConfigs = store.warpConfigs.filter { it.id != config.id }
-        warpConfigs = store.warpConfigs
-        if (selected == Warp.selectionOf(config)) select(Warp.ID)
-    }
 
     /** A subscription address, or text with share links in it (or a JSON config). */
     fun addText(text: String) {
@@ -554,7 +505,8 @@ class AppModel(context: Context) {
         val list = only ?: store.servers
         if (list.isEmpty()) return
         val session = VpnState.session?.takeIf { running }
-        markBusy(R.string.pinging)
+        val ids = list.map { it.id }.toSet()
+        measuring = measuring + ids
         work.execute {
             val results = ConcurrentHashMap<String, Int>()
             val pool = Executors.newFixedThreadPool(if (session != null) 8 else 32)
@@ -581,7 +533,7 @@ class AppModel(context: Context) {
             }
             store.setDelays(results)
             ui {
-                markBusy(null)
+                measuring = measuring - ids
                 reload()
             }
         }

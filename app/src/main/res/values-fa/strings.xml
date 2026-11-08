@@ -174,15 +174,8 @@
     <string name="progress_warp_foreign">راهی پیدا شد. کمی بیشتر منتظر خروجی خارج از ایران می‌مانیم</string>
     <string name="progress_psiphon">وصل کردن Psiphon از داخل WARP برای خروجی خارج از ایران</string>
     <string name="progress_starting">شروع اتصال</string>
-    <string name="speed_title">سرعت</string>
     <string name="speed_down">دانلود</string>
     <string name="speed_up">آپلود</string>
-    <string name="speed_total">این اتصال: %1$s دانلود، %2$s آپلود</string>
-    <string name="speed_test">تست سرعت</string>
-    <string name="speed_testing">در حال تست…</string>
-    <string name="speed_mbps">%1$s مگابیت</string>
-    <string name="speed_failed">تست سرعت انجام نشد.</string>
-    <string name="speed_test_hint">تا ۷۰ مگابایت از طریق VPN، از Cloudflare.</string>
     <string name="stat_traffic">حجم</string>
     <string name="stat_traffic_of">%1$s از %2$s</string>
     <string name="stat_traffic_left">%1$s مانده</string>
@@ -220,20 +213,42 @@
     <string name="detailed_log">لاگ دقیق</string>
     <string name="detailed_log_hint">همه‌ی اتصال‌ها در لاگ‌ها نوشته می‌شوند تا معلوم شود چرا چیزی باز نمی‌شود. بعدش خاموشش کنید: گوشی را کمی کند می‌کند.</string>
 
-    <!-- 0.4.2 -->
-    <string name="warp_find">پیدا کردن کانفیگ</string>
-    <string name="warp_finding">در حال پیدا کردن…</string>
-    <string name="warp_saved_title">کانفیگ‌های ذخیره‌شده</string>
-    <string name="warp_find_hint">همه‌ی راه‌های عبور از شبکه‌ی شما را امتحان می‌کند، سرعت هر کدام را می‌سنجد (حدود ۵ مگابایت برای هر کدام) و آن‌هایی که کار می‌کنند را، سریع‌ترین اول، ذخیره می‌کند. کانفیگ ذخیره‌شده در چند ثانیه وصل می‌شود.</string>
-    <string name="warp_find_disconnect">اول قطع کنید: کانفیگ‌ها روی شبکه‌ی خود شما تست می‌شوند.</string>
-    <string name="warp_found">%1$d کانفیگ WARP پیدا شد</string>
-    <string name="warp_found_none">الان روی این شبکه راهی پیدا نشد</string>
-    <string name="warp_config_name">WARP · %1$s</string>
-
     <!-- 0.4.2 apps -->
     <string name="apps_full_hint">همه‌ی برنامه‌ها از VPN استفاده می‌کنند. برای انتخاب برنامه‌ها، بالا «برنامه‌محور» را بزنید.</string>
 
     <!-- 0.4.3 -->
     <string name="show_all">نمایش همه‌ی %1$d</string>
     <string name="show_less">نمایش کمتر</string>
+
+    <!-- 0.4.4: the new screens -->
+    <string name="used">مصرف</string>
+    <string name="could_not_connect">وصل نشد</string>
+    <string name="status_off_empty">برای شروع یک سرور اضافه کنید</string>
+    <string name="tap_to_add">برای افزودن لمس کنید</string>
+    <string name="usage_short">%1$s مانده، %2$d روز</string>
+    <string name="left_of">مانده از %1$s</string>
+    <string name="left_only">مانده</string>
+    <string name="days_left_label">روز مانده</string>
+    <string name="responding">%1$d از %2$d پاسخ‌گو.</string>
+    <string name="updated_when">به‌روزرسانی %1$s.</string>
+    <string name="filter_all">همه</string>
+    <string name="filter_errors">خطا</string>
+    <string name="filter_warnings">هشدار</string>
+    <string name="latest">آخرین</string>
+    <string name="manual_short">دستی</string>
+    <string name="public_short">عمومی</string>
+    <string name="search_configs">جست‌وجوی کانفیگ‌ها</string>
+    <string name="no_configs_match">کانفیگی پیدا نشد</string>
+    <string name="no_configs_match_hint">اسم، کشور یا پروتکل را امتحان کنید.</string>
+    <string name="tap_again_remove">برای حذف دوباره بزنید</string>
+    <string name="remove_subscription">حذف اشتراک</string>
+    <string name="remove_all">حذف همه</string>
+    <string name="protocol">پروتکل</string>
+    <string name="country">کشور</string>
+    <string name="ping">پینگ</string>
+    <string name="source">منبع</string>
+    <string name="address">آدرس</string>
+    <string name="apps_every">همه‌ی برنامه‌ها</string>
+    <string name="licenses">مجوزهای متن‌باز</string>
+    <string name="back">بازگشت</string>
 </resources>

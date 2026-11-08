@@ -7,8 +7,7 @@ import java.util.UUID
 
 /**
  * A server the user added, by hand or from a subscription. Only the link is kept; it is parsed
- * when needed. `exit` is the country traffic left from when Bridge was connected through it, and
- * `speed` the download speed its last speed test measured, in Mbps.
+ * when needed. `exit` is the country traffic left from when Bridge was connected through it.
  */
 data class Server(
     val id: String,
@@ -17,7 +16,6 @@ data class Server(
     val subscription: String? = null,
     val delay: Int? = null,
     val exit: String? = null,
-    val speed: Double? = null,
 ) {
     /** Where it is: the country seen when connected, or a guess from its name. */
     val country: String? get() = exit ?: Regions.guess(name)
@@ -26,7 +24,6 @@ data class Server(
         subscription?.let { o.put("subscription", it) }
         delay?.let { o.put("delay", it) }
         exit?.let { o.put("exit", it) }
-        speed?.let { o.put("speed", it) }
     }
 
     companion object {
@@ -37,7 +34,6 @@ data class Server(
             o.optString("subscription").ifEmpty { null },
             if (o.has("delay")) o.getInt("delay") else null,
             o.optString("exit").ifEmpty { null },
-            if (o.has("speed")) o.getDouble("speed") else null,
         )
 
         fun fromLink(link: String, subscription: String? = null, name: String? = null) =
@@ -117,12 +113,6 @@ class Store(context: Context) {
     var fakeIp: Boolean
         get() = prefs.getBoolean("fakeIp2", false)
         set(value) = prefs.edit().putBoolean("fakeIp2", value).apply()
-
-    /** WARP configs "Find configs" saved, fastest first. */
-    @get:Synchronized @set:Synchronized
-    var warpConfigs: List<WarpConfig>
-        get() = readArray("warpConfigs").mapNotNull { WarpConfig.fromJson(it) }
-        set(value) = prefs.edit().putString("warpConfigs", JSONArray(value.map { it.toJson() }).toString()).apply()
 
     /** How Free WARP connects. */
     var warpChoice: Warp.Choice
@@ -204,9 +194,16 @@ class Store(context: Context) {
         return (0 until array.length()).mapNotNull { array.optJSONObject(it) }
     }
 
+    /** Saved WARP configs are gone: whoever had one picked is on Free WARP. */
+    private fun dropWarpConfigs() {
+        if (selected.startsWith("${Warp.ID}:")) selected = Warp.ID
+        prefs.edit().remove("warpConfigs").apply()
+    }
+
     /** 0.1.0 kept one link. */
     private fun migrate() {
         dropInfoConfigs()
+        dropWarpConfigs()
         val old = prefs.getString("link", null) ?: return
         if (old.isNotBlank() && !prefs.contains("servers")) {
             val server = Server.fromLink(old)

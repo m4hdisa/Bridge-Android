@@ -1,9 +1,9 @@
 package io.github.m4hdisa.bridge.ui
 
-import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -11,31 +11,29 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -44,132 +42,117 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import io.github.m4hdisa.bridge.AUTO
+import androidx.compose.ui.unit.min
 import io.github.m4hdisa.bridge.AppModel
 import io.github.m4hdisa.bridge.Health
 import io.github.m4hdisa.bridge.R
-import io.github.m4hdisa.bridge.Subscription
+import io.github.m4hdisa.bridge.Server
+import io.github.m4hdisa.bridge.Traffic
 import io.github.m4hdisa.bridge.VpnState
-import io.github.m4hdisa.bridge.Warp
 import kotlinx.coroutines.delay
 import java.util.Locale
 
 /**
- * The dashboard, top to bottom: the connect key and how the connection is (where it leaves, on a
- * map, and its speed), the configs to pick from in a box, then the subscriptions. Mode lives in
- * Settings: on a phone Full VPN is what most people want.
+ * The dashboard, one screen that never scrolls: the header, the connect key with equal room above
+ * and below it, how the connection is, and the chosen server. The list of servers has a page of
+ * its own, opened from that last box.
  */
 @Composable
-fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit, onOpenApps: () -> Unit, onAdd: () -> Unit) {
+fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit, onAdd: () -> Unit) {
     val status = model.status
+    val canConnect = model.warpSelected || model.servers.isNotEmpty()
     val keyState = when (status) {
         VpnState.Status.Running -> KeyState.On
         VpnState.Status.Stopped -> KeyState.Off
         else -> KeyState.Busy
     }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(4.dp))
-        ConnectKey(
-            state = keyState,
-            label = stringResource(if (status == VpnState.Status.Stopped) R.string.connect else R.string.disconnect),
-            contentDescription = stringResource(if (status == VpnState.Status.Stopped) R.string.connect else R.string.disconnect),
-            enabled = status != VpnState.Status.Stopping,
-            onClick = onConnect,
-        )
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            StatusDot(
-                when {
-                    keyState == KeyState.On && model.health.state == Health.State.Failed -> Bridge.warning
-                    keyState == KeyState.On -> Bridge.success
-                    keyState == KeyState.Busy -> Bridge.brand
-                    else -> Bridge.mutedForeground
-                },
-                pulse = keyState == KeyState.Busy,
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                stringResource(
-                    when (status) {
-                        VpnState.Status.Stopped -> R.string.status_off
-                        VpnState.Status.Starting -> R.string.status_starting
-                        VpnState.Status.Running -> R.string.status_on
-                        VpnState.Status.Stopping -> R.string.status_stopping
-                    },
-                ),
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-            )
-            // As wide as the dot and its gap, so the words sit in the middle under the button.
-            Spacer(Modifier.width(18.dp))
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            when (status) {
-                VpnState.Status.Running -> stringResource(R.string.connected_for, elapsed(model.connectedAt))
-                VpnState.Status.Starting -> stringResource(model.progress ?: R.string.status_starting_hint)
-                else -> stringResource(R.string.status_off_hint)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = Bridge.mutedForeground,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-
-    val error = model.vpnError?.let { stringResource(R.string.error_prefix, it) } ?: model.localError?.let { stringResource(it) }
-    if (error != null) {
-        Spacer(Modifier.height(16.dp))
-        Notice(Icons.CircleAlert, error, Tone.Danger)
-    }
-
-    if (model.running) {
-        Spacer(Modifier.height(20.dp))
-        ConnectionPanel(model)
-    }
-
-    SectionLabel(stringResource(R.string.home_server)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            RefreshAction(stringResource(R.string.refresh_all), model.updating.isNotEmpty()) { model.refreshAll() }
-            IconAction(Icons.Zap, stringResource(R.string.test_all), { model.measure() }, enabled = model.servers.isNotEmpty() && model.busy == null)
-            IconAction(Icons.Plus, stringResource(R.string.add_servers), onAdd)
-            Row(Modifier.clip(ControlShape).clickable(onClick = onOpenServers).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.manage_servers), style = MaterialTheme.typography.labelMedium, color = Bridge.mutedForeground)
-                Spacer(Modifier.width(4.dp))
-                DirectionalIcon(Icons.ArrowRight, null, Modifier.size(14.dp))
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        // The map gives way first on a short phone, so the key and the numbers keep their room.
+        val mapHeight = (maxHeight - 48.dp - 170.dp - 118.dp - 72.dp - 34.dp).coerceIn(0.dp, 128.dp).let { if (it < 48.dp) 0.dp else it }
+        Column(Modifier.fillMaxSize()) {
+            AppHeader("Bridge", { LogoTile() }) {
+                HeaderAction(Icons.Plus, stringResource(R.string.add_servers), onAdd)
             }
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                val adding = status == VpnState.Status.Stopped && !canConnect
+                val label = stringResource(
+                    when {
+                        adding -> R.string.add_servers
+                        status == VpnState.Status.Stopped -> R.string.connect
+                        status == VpnState.Status.Starting -> R.string.cancel
+                        else -> R.string.disconnect
+                    },
+                )
+                ConnectKey(
+                    state = keyState,
+                    label = label,
+                    contentDescription = label,
+                    enabled = status != VpnState.Status.Stopping,
+                    onClick = if (adding) onAdd else onConnect,
+                    side = min(maxHeight, 224.dp).coerceAtLeast(96.dp),
+                    icon = if (adding) Icons.Plus else Icons.Power,
+                    note = if (status == VpnState.Status.Running) elapsed(model.connectedAt) else null,
+                )
+            }
+            ConnectionCard(model, canConnect, mapHeight)
+            Spacer(Modifier.height(10.dp))
+            ServerBox(model, onOpenServers)
+            Spacer(Modifier.height(10.dp))
         }
     }
-    ConfigCards(model, onAdd)
+}
 
-    if (model.perApp) {
-        SectionLabel(stringResource(R.string.apps_on_vpn))
-        AppsCard(model, onOpenApps)
+/** When connected, a blue light comes down from the top of the screen, moves slowly and fades out towards the middle. */
+@Composable
+fun ConnectedLight(on: Boolean, modifier: Modifier = Modifier) {
+    val alpha by animateFloatAsState(if (on) 1f else 0f, tween(700), label = "light")
+    val rise by animateFloatAsState(if (on) 0f else -0.45f, tween(1100), label = "rise")
+    if (alpha == 0f) return
+    val moving = rememberInfiniteTransition(label = "light")
+    val a by moving.animateFloat(-1f, 1f, infiniteRepeatable(tween(8_000), RepeatMode.Reverse), label = "a")
+    val b by moving.animateFloat(1f, -1f, infiniteRepeatable(tween(11_000), RepeatMode.Reverse), label = "b")
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.62f)
+            .graphicsLayer {
+                this.alpha = alpha
+                translationY = rise * size.height
+                compositingStrategy = CompositingStrategy.Offscreen
+            },
+    ) {
+        val w = size.width
+        val h = size.height
+        val first = Offset(w * (0.32f + 0.16f * a), h * 0.04f)
+        val second = Offset(w * (0.70f + 0.16f * b), -h * 0.02f)
+        drawRect(Brush.radialGradient(listOf(Bridge.primary.copy(alpha = 0.95f), Color.Transparent), first, w * 1.05f))
+        drawRect(Brush.radialGradient(listOf(Bridge.brand.copy(alpha = 0.6f), Color.Transparent), second, w * 0.8f))
+        drawRect(Brush.verticalGradient(0f to Color.Black, 0.25f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
     }
+}
 
-
-    if (model.bypassIran) {
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.MapPin, null, Modifier.size(14.dp), tint = Bridge.mutedForeground)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.iran_skips), style = MaterialTheme.typography.bodySmall)
-        }
+@Composable
+private fun LogoTile() {
+    Box(Modifier.size(36.dp).clip(ControlShape).background(Bridge.primary), contentAlignment = Alignment.Center) {
+        Icon(painterResource(R.drawable.ic_notification), null, Modifier.size(26.dp), tint = Bridge.primaryForeground)
     }
 }
 
@@ -199,126 +182,181 @@ fun countryName(code: String): String {
     return Locale("", code).getDisplayCountry(locale).ifEmpty { code }
 }
 
-/** Where traffic leaves, on a map with where the phone is; then the speed and a speed test. */
+/** Where traffic leaves, on a map with where the phone is; then the speed. A failed connection is told here too. */
 @Composable
-private fun ConnectionPanel(model: AppModel) {
+private fun ConnectionCard(model: AppModel, canConnect: Boolean, mapHeight: Dp) {
     val health = model.health
-    val t = model.traffic
-    val speed = model.speed
-    val warp = model.warpSelected
-    val context = LocalContext.current
-    BridgeCard(padding = PaddingValues(0.dp)) {
-        WorldMap(
-            home = model.homeCountry,
-            exitCountry = health.country,
-            exitAt = health.at,
-            modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
-        )
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            val country = health.country
+    val running = model.running
+    val status = model.status
+    val error = if (status == VpnState.Status.Stopped) model.vpnError ?: model.localError?.let { stringResource(it) } else null
+    BridgeCard(
+        modifier = if (error != null) Modifier.border(1.dp, Bridge.destructive.copy(alpha = 0.55f), CardShape) else Modifier,
+        padding = PaddingValues(0.dp),
+    ) {
+        if (mapHeight > 0.dp) {
+            WorldMap(
+                home = model.homeCountry,
+                exitCountry = if (running) health.country else null,
+                exitAt = if (running) health.at else null,
+                height = mapHeight,
+                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp),
+            )
+        }
+        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             when {
+                error != null -> {
+                    Lead { Icon(Icons.CircleAlert, null, Modifier.size(20.dp), tint = Bridge.destructive) }
+                    TitleAndLine(stringResource(R.string.could_not_connect), error, Modifier.weight(1f), lines = 3)
+                    Box(Modifier.padding(start = 4.dp)) { IconAction(Icons.X, stringResource(R.string.close), { model.clearError() }) }
+                }
+                status == VpnState.Status.Stopped -> {
+                    Lead { Icon(Icons.Shield, null, Modifier.size(20.dp), tint = Bridge.mutedForeground) }
+                    TitleAndLine(stringResource(R.string.status_off), stringResource(if (canConnect) R.string.status_off_hint else R.string.status_off_empty), Modifier.weight(1f))
+                }
+                status != VpnState.Status.Running -> {
+                    Lead { Icon(Icons.LoaderCircle, null, Modifier.size(20.dp), tint = Bridge.brand) }
+                    TitleAndLine(
+                        stringResource(if (status == VpnState.Status.Starting) R.string.status_starting else R.string.status_stopping),
+                        stringResource(model.progress ?: R.string.status_starting_hint),
+                        Modifier.weight(1f),
+                    )
+                }
                 health.state == Health.State.Failed -> {
-                    Icon(Icons.CircleAlert, null, Modifier.size(18.dp), tint = Bridge.warning)
-                    Spacer(Modifier.width(10.dp))
+                    Lead { Icon(Icons.CircleAlert, null, Modifier.size(20.dp), tint = Bridge.warning) }
                     Text(stringResource(R.string.not_answering), style = MaterialTheme.typography.bodyMedium, color = Bridge.warning, modifier = Modifier.weight(1f))
                     IconAction(Icons.RefreshCw, stringResource(R.string.health_check_now), { model.checkNow() })
                 }
-                country != null -> {
-                    if (warp) {
-                        Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
-                    } else {
-                        FlagIcon(country, width = 26.dp)
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            if (warp) "Cloudflare WARP" else countryName(country),
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            if (warp) stringResource(R.string.exit_in, countryName(country)) else health.city ?: stringResource(R.string.exit_location),
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Column(horizontalAlignment = Alignment.End) {
-                        health.ip?.let { Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = GeistMono), maxLines = 1) }
-                        if (health.delay > 0) {
-                            Spacer(Modifier.height(3.dp))
-                            DelayBadge(health.delay)
-                        }
-                    }
-                }
+                health.country != null -> ExitDetails(model.warpSelected, health)
                 else -> {
-                    Icon(Icons.Globe, null, Modifier.size(16.dp), tint = Bridge.mutedForeground)
-                    Spacer(Modifier.width(10.dp))
-                    Text(stringResource(R.string.exit_finding), style = MaterialTheme.typography.bodyMedium, color = Bridge.mutedForeground)
+                    Lead { Icon(Icons.Globe, null, Modifier.size(20.dp), tint = Bridge.mutedForeground) }
+                    Text(stringResource(R.string.exit_finding), style = MaterialTheme.typography.bodyMedium, color = Bridge.mutedForeground, modifier = Modifier.weight(1f))
                 }
             }
         }
         HorizontalDivider(color = Bridge.border)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SpeedCell(Icons.ArrowDown, Bridge.brand, rate(t.down), stringResource(R.string.speed_down), Modifier.weight(1f))
-            Box(Modifier.width(1.dp).height(40.dp).background(Bridge.border))
-            SpeedCell(Icons.ArrowUp, Bridge.mutedForeground, rate(t.up), stringResource(R.string.speed_up), Modifier.weight(1f))
+        Meters(model.traffic, running)
+    }
+}
+
+@Composable
+private fun Lead(content: @Composable () -> Unit) {
+    Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) { content() }
+    Spacer(Modifier.width(10.dp))
+}
+
+@Composable
+private fun TitleAndLine(title: String, line: String, modifier: Modifier = Modifier, lines: Int = 1) {
+    Column(modifier) {
+        Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(line, style = MaterialTheme.typography.bodySmall, maxLines = lines, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ExitDetails(warp: Boolean, health: Health) {
+    val country = health.country ?: return
+    Lead {
+        if (warp) {
+            Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
+        } else {
+            FlagIcon(country, width = 24.dp)
         }
-        HorizontalDivider(color = Bridge.border)
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                when {
-                    speed.failed -> Text(stringResource(R.string.speed_failed), style = MaterialTheme.typography.bodySmall, color = Bridge.destructive)
-                    speed.down != null || speed.up != null -> Text(
-                        listOfNotNull(
-                            speed.down?.let { "↓ " + stringResource(R.string.speed_mbps, mbpsText(it)) },
-                            speed.up?.let { "↑ " + stringResource(R.string.speed_mbps, mbpsText(it)) },
-                        ).joinToString("   "),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    else -> Text(
-                        stringResource(R.string.speed_total, Formatter.formatShortFileSize(context, t.totalDown), Formatter.formatShortFileSize(context, t.totalUp)),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            OutlineButton(
-                stringResource(if (speed.running) R.string.speed_testing else R.string.speed_test),
-                { model.testSpeed() },
-                icon = Icons.Gauge,
-                enabled = !speed.running,
-                height = 32.dp,
-            )
+    }
+    TitleAndLine(
+        if (warp) "Cloudflare WARP" else countryName(country),
+        if (warp) stringResource(R.string.exit_in, countryName(country)) else health.city ?: stringResource(R.string.exit_location),
+        Modifier.weight(1f),
+    )
+    Spacer(Modifier.width(8.dp))
+    Column(horizontalAlignment = Alignment.End) {
+        health.ip?.let { Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = GeistMono), maxLines = 1) }
+        if (health.delay > 0) {
+            Text(stringResource(R.string.delay_ms, health.delay), style = MaterialTheme.typography.labelMedium, color = delayColor(health.delay), maxLines = 1)
         }
     }
 }
 
 @Composable
-private fun SpeedCell(icon: ImageVector, tint: Color, value: String, label: String, modifier: Modifier) {
-    Row(modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(16.dp), tint = tint)
-        Spacer(Modifier.width(10.dp))
-        Column {
-            Text(value, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
-            Text(label, style = MaterialTheme.typography.bodySmall)
+private fun Meters(t: Traffic, running: Boolean) {
+    val context = LocalContext.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Meter(Icons.ArrowDown, stringResource(R.string.speed_down), if (running) rate(t.down) else "-", running, Modifier.weight(1f))
+        Box(Modifier.width(1.dp).height(40.dp).background(Bridge.border))
+        Meter(Icons.ArrowUp, stringResource(R.string.speed_up), if (running) rate(t.up) else "-", running, Modifier.weight(1f))
+        Box(Modifier.width(1.dp).height(40.dp).background(Bridge.border))
+        Meter(Icons.Activity, stringResource(R.string.used), if (running) "⁦${Formatter.formatShortFileSize(context, t.totalDown + t.totalUp)}⁩" else "-", running, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun Meter(icon: ImageVector, label: String, value: String, live: Boolean, modifier: Modifier) {
+    Column(modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(13.dp), tint = if (live) Bridge.brand else Bridge.mutedForeground)
+            Spacer(Modifier.width(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground, maxLines = 1)
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (live) FontWeight.SemiBold else FontWeight.Medium),
+            color = if (live) Bridge.foreground else Bridge.mutedForeground,
+            maxLines = 1,
+        )
+    }
+}
+
+/** The chosen server, and the way to change it. */
+@Composable
+private fun ServerBox(model: AppModel, onOpen: () -> Unit) {
+    val server = model.servers.firstOrNull { it.id == model.selected }
+    val auto = model.autoSelected
+    val warp = model.warpSelected
+    val shown = server ?: if (!warp && !auto) model.servers.firstOrNull() else null
+    BridgeCard(padding = PaddingValues(0.dp), onClick = onOpen) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Lead {
+                when {
+                    warp -> Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
+                    auto -> Icon(Icons.Zap, null, Modifier.size(20.dp), tint = Bridge.brand)
+                    shown != null -> ServerFlag(shown)
+                    else -> Icon(Icons.Globe, null, Modifier.size(20.dp), tint = Bridge.mutedForeground)
+                }
+            }
+            when {
+                warp -> TitleAndLine(stringResource(R.string.warp_name), "Cloudflare WARP", Modifier.weight(1f))
+                auto -> TitleAndLine(
+                    stringResource(R.string.auto_name),
+                    model.activeServer()?.takeIf { model.running }?.let { stringResource(R.string.auto_now, displayName(it)) } ?: stringResource(R.string.auto_hint_short, model.servers.size),
+                    Modifier.weight(1f),
+                )
+                shown != null -> {
+                    TitleAndLine(displayName(shown), sourceLine(model, shown), Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    Ping(shown, model)
+                }
+                else -> TitleAndLine(stringResource(R.string.empty_title), stringResource(R.string.tap_to_add), Modifier.weight(1f))
+            }
+            Spacer(Modifier.width(6.dp))
+            DirectionalIcon(Icons.ChevronRight, null, Modifier.size(22.dp))
         }
     }
 }
 
-private const val IRAN_FLAG = "🇮🇷"
-
-fun mbpsText(value: Double): String = String.format(Locale.US, if (value >= 10) "%.0f" else "%.1f", value)
+@Composable
+private fun sourceLine(model: AppModel, server: Server): String {
+    val subscription = model.subscriptions.firstOrNull { it.id == server.subscription } ?: return stringResource(R.string.manual_configs)
+    val name = if (subscription.public) stringResource(R.string.public_sub_name) else subscription.name
+    val summary = subscription.usage?.let { usageSummary(it) } ?: return name
+    return "$name: $summary"
+}
 
 /**
  * The world as dots, with where the phone is and where traffic leaves, and an arc between them.
  * Drawn from data in the app: no map service is asked, so no one learns where the phone is.
  */
 @Composable
-fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?, modifier: Modifier = Modifier) {
+fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?, modifier: Modifier = Modifier, height: Dp? = null) {
     val from = home?.let { WorldData.PLACES[it] }
     val to = exitAt ?: exitCountry?.let { WorldData.PLACES[it] }
     val pulse by rememberInfiniteTransition(label = "map").animateFloat(0f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Restart), label = "pulse")
@@ -347,7 +385,7 @@ fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?,
     // Once both places are known, the map zooms in on them and brings them to the middle.
     val target = remember(from, to) {
         val a = from?.let { unit(it) }
-        val b = to?.let { unit(it) } ?: return@remember null
+        val b = to?.let { unit(it) } ?: a ?: return@remember null
         val left = minOf(a?.x ?: b.x, b.x)
         val right = maxOf(a?.x ?: b.x, b.x)
         val top = minOf(a?.y ?: b.y, b.y)
@@ -363,12 +401,12 @@ fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?,
         if (target == null) progress.snapTo(0f) else progress.animateTo(1f, tween(1200, delayMillis = 300))
     }
     Box(modifier.clip(ItemShape)) {
-        Canvas(Modifier.fillMaxWidth().aspectRatio(cols / rows)) {
+        Canvas(Modifier.fillMaxWidth().then(if (height != null) Modifier.height(height) else Modifier.aspectRatio(cols / rows))) {
             val t = progress.value
             val zoom = 1f + ((target?.first ?: 1f) - 1f) * t
             val cx = cols / 2 + ((target?.second ?: (cols / 2)) - cols / 2) * t
             val cy = rows / 2 + ((target?.third ?: (rows / 2)) - rows / 2) * t
-            val cell = size.width / cols
+            val cell = maxOf(size.width / cols, size.height / rows)
             val scale = cell * zoom
             fun screen(u: Offset) = Offset((u.x - cx) * scale + size.width / 2, (u.y - cy) * scale + size.height / 2)
             fun point(at: Pair<Double, Double>) = screen(unit(at))
@@ -437,277 +475,47 @@ private fun MapKey(color: Color, text: String, country: String?) {
     }
 }
 
-/**
- * The configs on the dashboard, a card a section: Free WARP with its saved configs, Auto, then
- * each subscription (its traffic and days left on top, its own update and test) and the configs
- * added by hand. A tap picks a config; long lists show the first few until opened.
- */
-@Composable
-private fun ConfigCards(model: AppModel, onAdd: () -> Unit) {
-    val context = LocalContext.current
-    val usable = model.servers.filter { model.parse(it).isSuccess }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (model.warpAvailable) {
-            BridgeCard(padding = PaddingValues(6.dp)) {
-                ConfigRow(
-                    on = model.warpSelected,
-                    lead = { Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 24.dp, height = 14.dp)) },
-                    title = stringResource(R.string.warp_name),
-                    subtitle = "Cloudflare WARP",
-                    trailing = { Badge(stringResource(R.string.warp_badge), Tone.Success) },
-                ) { model.select(Warp.ID) }
-                for (config in model.warpConfigs) WarpConfigRow(model, config)
-            }
-        }
-        if (usable.size > 1) {
-            BridgeCard(padding = PaddingValues(6.dp)) {
-                val now = if (model.autoSelected) model.activeServer() else null
-                ConfigRow(
-                    on = model.autoSelected,
-                    lead = { Icon(Icons.Zap, null, Modifier.size(18.dp), tint = Bridge.brand) },
-                    title = stringResource(R.string.auto_name),
-                    subtitle = if (now != null) stringResource(R.string.auto_now, now.name) else stringResource(R.string.auto_hint_short, usable.size),
-                ) { model.select(AUTO) }
-            }
-        }
-        // A card a subscription (and one for configs added by hand).
-        val groups = model.subscriptions.map { it to usable.filter { s -> s.subscription == it.id } }.filter { it.second.isNotEmpty() } +
-            listOf(null to usable.filter { s -> model.subscriptions.none { it.id == s.subscription } }).filter { it.second.isNotEmpty() }
-        for ((subscription, servers) in groups) {
-            BridgeCard(padding = PaddingValues(6.dp)) {
-                GroupHeader(model, subscription, servers)
-                subscription?.usage?.let { SubUsage(it, Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) }
-                var open by remember(subscription?.id) { mutableStateOf(false) }
-                val chosenInside = servers.any { it.id == model.selected }
-                val shown = if (open || servers.size <= FOLD) servers else servers.take(FOLD).let { first -> if (chosenInside && first.none { it.id == model.selected }) first + servers.first { it.id == model.selected } else first }
-                for (server in shown) ServerChoice(model, server)
-                if (servers.size > FOLD) {
-                    Row(
-                        Modifier.fillMaxWidth().clip(ItemShape).clickable { open = !open }.padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            stringResource(if (open) R.string.show_less else R.string.show_all, servers.size),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Bridge.brand,
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Icons.ChevronDown, null, Modifier.size(14.dp).rotate(if (open) 180f else 0f), tint = Bridge.brand)
-                    }
-                }
-            }
-        }
-        if (usable.isEmpty()) {
-            BridgeCard {
-                Column(Modifier.padding(10.dp)) {
-                    Text(stringResource(R.string.empty_servers), style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PrimaryButton(stringResource(R.string.menu_paste_short), { pasteInto(context, model) }, icon = Icons.ClipboardPaste, height = 36.dp)
-                        OutlineButton(stringResource(R.string.add_servers), onAdd, icon = Icons.Plus, height = 36.dp)
-                    }
-                }
-            }
-        }
-    }
-}
 
-/** How many configs a subscription's card shows before "Show all". */
-private const val FOLD = 6
-
-/** A subscription's traffic and days left, as its panel told them: a bar for the traffic, the days beside it. */
-@Composable
-private fun SubUsage(usage: io.github.m4hdisa.bridge.Usage, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val now = System.currentTimeMillis()
-    val ends = usage.expire * 1000
-    val days = if (usage.expire > 0) ((ends - now) / DateUtils.DAY_IN_MILLIS).toInt() else null
-    val left = usage.left()
-    Column(modifier.fillMaxWidth().clip(ItemShape).background(Bridge.muted).padding(horizontal = 12.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Gauge, null, Modifier.size(14.dp), tint = Bridge.brand)
-            Spacer(Modifier.width(6.dp))
-            Text(
-                when {
-                    usage.total > 0 -> stringResource(R.string.stat_traffic_of, Formatter.formatShortFileSize(context, usage.used), Formatter.formatShortFileSize(context, usage.total))
-                    left != null -> stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, left))
-                    else -> stringResource(R.string.stat_unlimited)
-                },
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-            )
-            if (days != null) {
-                Text(
-                    if (ends <= now) stringResource(R.string.stat_ended) else pluralStringResource(R.plurals.stat_days_left, days, days),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (ends - now < 3 * DateUtils.DAY_IN_MILLIS) Bridge.warning else Bridge.mutedForeground,
-                )
-            }
-        }
-        if (usage.total > 0) {
-            Spacer(Modifier.height(8.dp))
-            val used = (usage.used.toFloat() / usage.total).coerceIn(0f, 1f)
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(ControlShape).background(Bridge.background)) {
-                Box(Modifier.fillMaxWidth(used).height(4.dp).background(if (used >= 0.9f) Bridge.warning else Bridge.brand))
-            }
-            left?.let {
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, it)), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-/** A section's title in the config box: the subscription, how many configs, and its own update and test. */
-@Composable
-private fun GroupHeader(model: AppModel, subscription: Subscription?, servers: List<io.github.m4hdisa.bridge.Server>) {
-    Row(Modifier.fillMaxWidth().padding(start = 10.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            when {
-                subscription == null -> Icons.Pencil
-                subscription.public -> Icons.Sparkles
-                else -> Icons.Link2
-            },
-            null,
-            Modifier.size(14.dp),
-            tint = Bridge.brand,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            when {
-                subscription == null -> stringResource(R.string.manual_configs)
-                subscription.public -> stringResource(R.string.public_sub_name)
-                else -> subscription.name
-            },
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(stringResource(R.string.configs_count, servers.size), style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
-        Spacer(Modifier.weight(1f))
-        if (subscription != null) RefreshAction(stringResource(R.string.sub_update), subscription.id in model.updating) { model.updateSubscription(subscription) }
-        IconAction(Icons.Zap, stringResource(R.string.test), { model.measure(servers) }, enabled = model.busy == null)
-    }
-}
-
-@Composable
-private fun ServerChoice(model: AppModel, server: io.github.m4hdisa.bridge.Server) {
-    val p = model.parse(server).getOrNull()
-    val country = server.country
-    ConfigRow(
-        on = server.id == model.selected,
-        lead = {
-            if (country != null) {
-                FlagIcon(country, width = 22.dp)
-            } else {
-                Icon(Icons.Globe, null, Modifier.size(18.dp), tint = Bridge.mutedForeground)
-            }
-        },
-        // The flag is already beside it, so not again in the name; Iran's is never shown.
-        title = server.name.replace(IRAN_FLAG, "").let { name -> country?.let { name.replace(flag(it).ifEmpty { IRAN_FLAG }, "") } ?: name }.trim().ifEmpty { server.name },
-        subtitle = listOfNotNull(
-            country?.let { countryName(it) },
-            p?.let { protocolOf(it.kind) + if (it.usesXray) " · Xray" else "" },
-        ).joinToString(" · "),
-        trailing = {
-            Column(horizontalAlignment = Alignment.End) {
-                DelayBadge(server.delay)
-                server.speed?.let {
-                    Spacer(Modifier.height(3.dp))
-                    Text("↓ " + stringResource(R.string.speed_mbps, mbpsText(it)), style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
-                }
-            }
-        },
-    ) { model.select(server.id) }
-}
-
-@Composable
-private fun ConfigRow(
-    on: Boolean,
-    lead: @Composable () -> Unit,
-    title: String,
-    subtitle: String,
-    trailing: (@Composable () -> Unit)? = null,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(ItemShape)
-            .background(if (on) Bridge.primary.copy(alpha = 0.14f) else Color.Transparent)
-            .then(if (on) Modifier.border(1.dp, Bridge.primary.copy(alpha = 0.45f), ItemShape) else Modifier)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { lead() }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotEmpty()) Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (trailing != null) {
-            Spacer(Modifier.width(8.dp))
-            trailing()
-        }
-        Spacer(Modifier.width(10.dp))
-        RadioMark(on)
-    }
-}
-
-/** A line of text with an icon, tinted for errors and warnings. */
-@Composable
-fun Notice(icon: ImageVector, text: String, tone: Tone, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(CardShape)
-            .background(tone.fill)
-            .border(1.dp, tone.line, CardShape)
-            .padding(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Icon(icon, null, Modifier.size(18.dp).padding(top = 1.dp), tint = tone.text)
-            Spacer(Modifier.width(10.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = tone.text)
-        }
-        if (action != null) {
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.padding(start = 28.dp)) { action() }
-        }
-    }
-}
-
-/** "vless / ws / tls" reads as "VLESS" on a badge. */
+/** "vless / ws / tls" reads as "VLESS". */
 fun protocolOf(kind: String): String = kind.substringBefore(" / ").uppercase()
 
+private const val IRAN_FLAG = "🇮🇷"
+
+/** A server's name without the flag that is already shown beside it; Iran's is never shown. */
+fun displayName(server: Server): String {
+    val country = server.country
+    return server.name.replace(IRAN_FLAG, "").let { name -> country?.let { name.replace(flag(it).ifEmpty { IRAN_FLAG }, "") } ?: name }.trim().ifEmpty { server.name }
+}
+
 @Composable
-private fun AppsCard(model: AppModel, onOpenApps: () -> Unit) {
-    val chosen = model.chosenApps
-    val names = model.installedApps?.filter { it.packageName in chosen }?.map { it.label } ?: emptyList()
-    BridgeCard(padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).clip(ItemShape).background(Bridge.muted), contentAlignment = Alignment.Center) {
-                Icon(Icons.Smartphone, null, Modifier.size(18.dp), tint = Bridge.mutedForeground)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.apps_count, chosen.size), style = MaterialTheme.typography.titleSmall)
-                if (names.isNotEmpty()) {
-                    Text(names.joinToString(", "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            OutlineButton(stringResource(R.string.add_app), onOpenApps, icon = Icons.Plus, height = 34.dp)
+fun ServerFlag(server: Server) {
+    val country = server.country
+    if (country != null) FlagIcon(country, width = 24.dp) else Icon(Icons.Globe, null, Modifier.size(20.dp), tint = Bridge.mutedForeground)
+}
+
+/** How a delay reads: green when quick, yellow when slow, red when very slow. */
+fun delayColor(delay: Int): Color = when {
+    delay >= 800 -> Bridge.destructive
+    delay >= 300 -> Bridge.warning
+    else -> Bridge.success
+}
+
+/** A server's delay as a plain colored number; a moving placeholder while it is being measured. */
+@Composable
+fun Ping(server: Server, model: AppModel) {
+    val delay = server.delay
+    when {
+        server.id in model.measuring -> Box(Modifier.size(width = 44.dp, height = 14.dp).clip(CircleShape).background(shimmer()))
+        delay == null -> Unit
+        delay <= 0 -> Text(stringResource(R.string.delay_failed), style = MaterialTheme.typography.labelMedium, color = Bridge.destructive, maxLines = 1)
+        else -> Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(String.format(LocalConfiguration.current.locales[0], "%d", delay), style = MaterialTheme.typography.titleSmall, color = delayColor(delay), maxLines = 1)
+            Text("ms", style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground, maxLines = 1)
         }
     }
 }
 
-/** The small round mark used in the top bar: the logo on its blue. */
+/** The small round mark: the logo on its blue. */
 @Composable
 fun LogoMark(modifier: Modifier = Modifier) {
     Box(modifier.size(32.dp).clip(ItemShape).background(Bridge.primary), contentAlignment = Alignment.Center) {

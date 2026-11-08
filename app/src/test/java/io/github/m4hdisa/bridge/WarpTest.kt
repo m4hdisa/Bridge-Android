@@ -146,19 +146,11 @@ class WarpTest {
     }
 
     @Test
-    fun aSavedWarpConfigIsTheWarpTunnel() {
-        val id = Warp.selectionOf(WarpConfig("abc", Warp.Method.H2, "162.159.198.1:443"))
-        assertTrue(Warp.isWarp(id))
-        assertEquals("abc", Warp.savedId(id))
-        val built = BoxConfig.build(input(listOf(server(0)), id, warpPort = 41000))
-        val proxy = JSONObject(built.json).getJSONArray("outbounds").objects().first { it.getString("tag") == "proxy" }
-        assertEquals(BoxConfig.WARP_TAG, proxy.getString("default"))
+    fun theGatewayThatWorkedLastTimeIsUsedAgain() {
         assertTrue(Warp.isGateway("162.159.198.1:443"))
         assertFalse(Warp.isGateway("1.2.3.4:443"))
         assertEquals("162.159.198.131:443", Warp.gateway("[+] using cloudflare edge 162.159.198.131:443"))
-        val config = WarpConfig("abc", Warp.Method.MIM_H2, "188.114.97.3:443", "DE", 4200, 12.5)
-        assertEquals(config, WarpConfig.fromJson(config.toJson()))
-        assertTrue(Warp.args(Warp.Method.MIM_H2, 1, "c", peer = "188.114.97.3:443", fresh = true).containsAll(listOf("--mim-outer", "188.114.97.3:443", "--no-quick-reconnect")))
+        assertTrue(Warp.args(Warp.Method.MIM_H2, 1, "c", peer = "188.114.97.3:443").containsAll(listOf("--mim-outer", "188.114.97.3:443", "--quick-reconnect")))
     }
 
     @Test

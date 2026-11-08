@@ -81,8 +81,6 @@ object BoxConfig {
         val autoCandidates = tags.values.toList()
         input.warpPort?.let { port ->
             tags[Warp.ID] = WARP_TAG
-            // A saved WARP config is the same tunnel to sing-box.
-            if (Warp.isWarp(input.selected)) tags[input.selected] = WARP_TAG
             outbounds.put(JSONObject().put("type", "socks").put("tag", WARP_TAG).put("server", "127.0.0.1").put("server_port", port).put("version", "5"))
         }
         require(tags.isNotEmpty()) { "no servers" }

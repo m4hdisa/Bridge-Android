@@ -99,14 +99,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             if (Warp.isWarp(store.selected)) {
                 val runner = WarpRunner(this, warpLog).also { warp = it }
                 val died = { if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died)) }
-                val saved = Warp.savedId(store.selected)?.let { id -> store.warpConfigs.firstOrNull { it.id == id } }
-                val port = if (saved != null) {
-                    runner.startSaved(saved, { VpnState.progress(it) }, died) { gateway ->
-                        store.warpConfigs = store.warpConfigs.map { if (it.id == saved.id) it.copy(gateway = gateway) else it }
-                    }
-                } else {
-                    runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }, died)
-                }
+                val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }, died)
                 if (stopping) return@synchronized
                 input = input.copy(warpPort = port)
             }
