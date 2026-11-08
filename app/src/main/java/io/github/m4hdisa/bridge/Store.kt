@@ -192,7 +192,8 @@ class Store(context: Context) {
         if (drop.isEmpty()) return
         servers = all.filter { it.id !in drop }
         subscriptions = subscriptions.map { s ->
-            if (s.usage != null) s else SubInfo.usage(info.filter { it.subscription == s.id && it.id in drop }.map { it.name })?.let { s.copy(usage = it) } ?: s
+            val names = SubInfo.usage(info.filter { it.subscription == s.id && it.id in drop }.map { it.name })
+            if (names == null) s else s.copy(usage = Usage.merge(s.usage, names))
         }
         if (selected in drop) selected = AUTO
     }

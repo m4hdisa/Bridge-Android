@@ -34,6 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
@@ -145,6 +147,7 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
         Row(verticalAlignment = Alignment.CenterVertically) {
             RefreshAction(stringResource(R.string.refresh_all), model.updating.isNotEmpty()) { model.refreshAll() }
             IconAction(Icons.Zap, stringResource(R.string.test_all), { model.measure() }, enabled = model.servers.isNotEmpty() && model.busy == null)
+            IconAction(Icons.Plus, stringResource(R.string.add_servers), onAdd)
             Row(Modifier.clip(ControlShape).clickable(onClick = onOpenServers).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.manage_servers), style = MaterialTheme.typography.labelMedium, color = Bridge.mutedForeground)
                 Spacer(Modifier.width(4.dp))
@@ -152,21 +155,13 @@ fun HomeScreen(model: AppModel, onConnect: () -> Unit, onOpenServers: () -> Unit
             }
         }
     }
-    ConfigBox(model, onAdd)
+    ConfigCards(model, onAdd)
 
     if (model.perApp) {
         SectionLabel(stringResource(R.string.apps_on_vpn))
         AppsCard(model, onOpenApps)
     }
 
-    SectionLabel(stringResource(R.string.subs_title)) {
-        Row(Modifier.clip(ControlShape).clickable(onClick = onAdd).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Plus, null, Modifier.size(14.dp), tint = Bridge.mutedForeground)
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.sub_add), style = MaterialTheme.typography.labelMedium, color = Bridge.mutedForeground)
-        }
-    }
-    SubscriptionsCard(model)
 
     if (model.bypassIran) {
         Spacer(Modifier.height(12.dp))
@@ -442,14 +437,18 @@ private fun MapKey(color: Color, text: String, country: String?) {
     }
 }
 
-/** Every config in a box on the dashboard, a tap to choose; it scrolls when there are many. */
+/**
+ * The configs on the dashboard, a card a section: Free WARP with its saved configs, Auto, then
+ * each subscription (its traffic and days left on top, its own update and test) and the configs
+ * added by hand. A tap picks a config; long lists show the first few until opened.
+ */
 @Composable
-private fun ConfigBox(model: AppModel, onAdd: () -> Unit) {
+private fun ConfigCards(model: AppModel, onAdd: () -> Unit) {
     val context = LocalContext.current
     val usable = model.servers.filter { model.parse(it).isSuccess }
-    BridgeCard(padding = PaddingValues(6.dp)) {
-        Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-            if (model.warpAvailable) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (model.warpAvailable) {
+            BridgeCard(padding = PaddingValues(6.dp)) {
                 ConfigRow(
                     on = model.warpSelected,
                     lead = { Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 24.dp, height = 14.dp)) },
@@ -459,8 +458,9 @@ private fun ConfigBox(model: AppModel, onAdd: () -> Unit) {
                 ) { model.select(Warp.ID) }
                 for (config in model.warpConfigs) WarpConfigRow(model, config)
             }
-            if (usable.size > 1) {
-                if (model.warpAvailable) HorizontalDivider(color = Bridge.border, modifier = Modifier.padding(vertical = 4.dp))
+        }
+        if (usable.size > 1) {
+            BridgeCard(padding = PaddingValues(6.dp)) {
                 val now = if (model.autoSelected) model.activeServer() else null
                 ConfigRow(
                     on = model.autoSelected,
@@ -469,15 +469,37 @@ private fun ConfigBox(model: AppModel, onAdd: () -> Unit) {
                     subtitle = if (now != null) stringResource(R.string.auto_now, now.name) else stringResource(R.string.auto_hint_short, usable.size),
                 ) { model.select(AUTO) }
             }
-            // One section a subscription (and one for configs added by hand), each with its own update and test.
-            val groups = model.subscriptions.map { it to usable.filter { s -> s.subscription == it.id } }.filter { it.second.isNotEmpty() } +
-                listOf(null to usable.filter { s -> model.subscriptions.none { it.id == s.subscription } }).filter { it.second.isNotEmpty() }
-            for ((subscription, servers) in groups) {
-                HorizontalDivider(color = Bridge.border, modifier = Modifier.padding(vertical = 4.dp))
+        }
+        // A card a subscription (and one for configs added by hand).
+        val groups = model.subscriptions.map { it to usable.filter { s -> s.subscription == it.id } }.filter { it.second.isNotEmpty() } +
+            listOf(null to usable.filter { s -> model.subscriptions.none { it.id == s.subscription } }).filter { it.second.isNotEmpty() }
+        for ((subscription, servers) in groups) {
+            BridgeCard(padding = PaddingValues(6.dp)) {
                 GroupHeader(model, subscription, servers)
-                for (server in servers) ServerChoice(model, server)
+                subscription?.usage?.let { SubUsage(it, Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) }
+                var open by remember(subscription?.id) { mutableStateOf(false) }
+                val chosenInside = servers.any { it.id == model.selected }
+                val shown = if (open || servers.size <= FOLD) servers else servers.take(FOLD).let { first -> if (chosenInside && first.none { it.id == model.selected }) first + servers.first { it.id == model.selected } else first }
+                for (server in shown) ServerChoice(model, server)
+                if (servers.size > FOLD) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(ItemShape).clickable { open = !open }.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(if (open) R.string.show_less else R.string.show_all, servers.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Bridge.brand,
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.ChevronDown, null, Modifier.size(14.dp).rotate(if (open) 180f else 0f), tint = Bridge.brand)
+                    }
+                }
             }
-            if (usable.isEmpty()) {
+        }
+        if (usable.isEmpty()) {
+            BridgeCard {
                 Column(Modifier.padding(10.dp)) {
                     Text(stringResource(R.string.empty_servers), style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(10.dp))
@@ -486,6 +508,53 @@ private fun ConfigBox(model: AppModel, onAdd: () -> Unit) {
                         OutlineButton(stringResource(R.string.add_servers), onAdd, icon = Icons.Plus, height = 36.dp)
                     }
                 }
+            }
+        }
+    }
+}
+
+/** How many configs a subscription's card shows before "Show all". */
+private const val FOLD = 6
+
+/** A subscription's traffic and days left, as its panel told them: a bar for the traffic, the days beside it. */
+@Composable
+private fun SubUsage(usage: io.github.m4hdisa.bridge.Usage, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val now = System.currentTimeMillis()
+    val ends = usage.expire * 1000
+    val days = if (usage.expire > 0) ((ends - now) / DateUtils.DAY_IN_MILLIS).toInt() else null
+    val left = usage.left()
+    Column(modifier.fillMaxWidth().clip(ItemShape).background(Bridge.muted).padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Gauge, null, Modifier.size(14.dp), tint = Bridge.brand)
+            Spacer(Modifier.width(6.dp))
+            Text(
+                when {
+                    usage.total > 0 -> stringResource(R.string.stat_traffic_of, Formatter.formatShortFileSize(context, usage.used), Formatter.formatShortFileSize(context, usage.total))
+                    left != null -> stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, left))
+                    else -> stringResource(R.string.stat_unlimited)
+                },
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+            )
+            if (days != null) {
+                Text(
+                    if (ends <= now) stringResource(R.string.stat_ended) else pluralStringResource(R.plurals.stat_days_left, days, days),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (ends - now < 3 * DateUtils.DAY_IN_MILLIS) Bridge.warning else Bridge.mutedForeground,
+                )
+            }
+        }
+        if (usage.total > 0) {
+            Spacer(Modifier.height(8.dp))
+            val used = (usage.used.toFloat() / usage.total).coerceIn(0f, 1f)
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(ControlShape).background(Bridge.background)) {
+                Box(Modifier.fillMaxWidth(used).height(4.dp).background(if (used >= 0.9f) Bridge.warning else Bridge.brand))
+            }
+            left?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, it)), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -587,59 +656,6 @@ private fun ConfigRow(
         }
         Spacer(Modifier.width(10.dp))
         RadioMark(on)
-    }
-}
-
-/** The subscriptions, each with its traffic and end date and a button to update it. */
-@Composable
-private fun SubscriptionsCard(model: AppModel) {
-    val subscriptions = model.subscriptions.filter { !it.public }
-    BridgeCard(padding = PaddingValues(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)) {
-        if (subscriptions.isEmpty()) {
-            Text(stringResource(R.string.subs_none), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 8.dp))
-        }
-        for ((i, s) in subscriptions.withIndex()) {
-            if (i > 0) HorizontalDivider(color = Bridge.border)
-            SubscriptionRow(model, s)
-        }
-    }
-}
-
-@Composable
-private fun SubscriptionRow(model: AppModel, s: Subscription) {
-    val context = LocalContext.current
-    val count = model.servers.count { it.subscription == s.id }
-    val usage = s.usage
-    val parts = mutableListOf(stringResource(R.string.configs_count, count))
-    if (usage != null && usage.total > 0) {
-        parts += stringResource(R.string.stat_traffic_of, Formatter.formatShortFileSize(context, usage.used), Formatter.formatShortFileSize(context, usage.total))
-    } else if (usage != null && usage.remaining > 0) {
-        parts += stringResource(R.string.stat_traffic_left, Formatter.formatShortFileSize(context, usage.remaining))
-    }
-    if (usage != null && usage.expire > 0) {
-        val ends = usage.expire * 1000
-        val now = System.currentTimeMillis()
-        val days = ((ends - now) / DateUtils.DAY_IN_MILLIS).toInt()
-        parts += if (ends <= now) stringResource(R.string.stat_ended) else pluralStringResource(R.plurals.stat_days_left, days, days)
-    } else if (s.updatedAt > 0) {
-        parts += stringResource(R.string.sub_updated_ago, DateUtils.getRelativeTimeSpanString(s.updatedAt).toString())
-    }
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Link2, null, Modifier.size(16.dp), tint = Bridge.brand)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(s.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(parts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (usage != null && usage.total > 0) {
-                Spacer(Modifier.height(6.dp))
-                val used = (usage.used.toFloat() / usage.total).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxWidth().height(4.dp).clip(ControlShape).background(Bridge.muted)) {
-                    Box(Modifier.fillMaxWidth(used).height(4.dp).background(if (used >= 0.9f) Bridge.warning else Bridge.brand))
-                }
-            }
-        }
-        Spacer(Modifier.width(4.dp))
-        RefreshAction(stringResource(R.string.sub_update), s.id in model.updating) { model.updateSubscription(s) }
     }
 }
 

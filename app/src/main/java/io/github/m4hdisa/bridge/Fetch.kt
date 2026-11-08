@@ -78,6 +78,15 @@ class FetchResult(val links: List<String>, val title: String?, val usage: Usage?
 /** A subscription's "subscription-userinfo" header: traffic used and allowed, in bytes, and when it ends (Unix seconds). */
 data class Usage(val used: Long, val total: Long, val expire: Long, val remaining: Long = 0) {
     companion object {
+        /** The panel's header first; what the info names say fills in what it left out. */
+        fun merge(header: Usage?, names: Usage?): Usage? {
+            if (header == null || names == null) return header ?: names
+            return header.copy(
+                expire = if (header.expire > 0) header.expire else names.expire,
+                remaining = if (header.total > 0 || header.remaining > 0) header.remaining else names.remaining,
+            )
+        }
+
         fun parse(header: String?): Usage? {
             if (header.isNullOrBlank()) return null
             val fields = header.split(";").associate { it.substringBefore("=").trim().lowercase() to it.substringAfter("=", "").trim() }
@@ -142,7 +151,7 @@ object Subscriptions {
         if (links.isEmpty()) throw IOException(noLinksReason(page.body))
         // Configs that only carry the traffic or days left become the subscription's usage.
         val (servers, fromNames) = SubInfo.split(links)
-        return FetchResult(servers, title(page.headers["profile-title"]), Usage.parse(page.headers["subscription-userinfo"]) ?: fromNames)
+        return FetchResult(servers, title(page.headers["profile-title"]), Usage.merge(Usage.parse(page.headers["subscription-userinfo"]), fromNames))
     }
 
     /** A BPB panel's own address (…/panel, …/login or …/sub) leads to its plain list. Its fragment list is JSON for Xray. */

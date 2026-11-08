@@ -122,6 +122,30 @@ class ConnectTest {
         assertTrue(page.contains("Example Domain"))
     }
 
+    /**
+     * The way a phone runs: Full VPN with Bridge itself left out, and another app (here the
+     * shell) opening a TCP connection. Before 0.4.2 only UDP got through like this, because the
+     * "mixed" TUN stack sent TCP replies by Bridge's own (non-VPN) routes.
+     */
+    @Test
+    fun otherAppsGetTcpWithBridgeLeftOut() {
+        val store = Store(context)
+        store.addLinks(listOf(live))
+        store.selected = store.servers.single().id
+        store.perApp = false
+        store.includeSelf = false
+        startVpn()
+        val log = File(context.filesDir, BridgeVpnService.LOG_FILE)
+        val shell = InstrumentationRegistry.getInstrumentation().uiAutomation
+        fun nc() = android.os.ParcelFileDescriptor.AutoCloseInputStream(shell.executeShellCommand("nc -w 4 1.1.1.1 80")).use { it.readBytes().toString(Charsets.UTF_8) }
+        val first = nc()
+        org.junit.Assume.assumeFalse("no nc on this image: $first", first.contains("not found"))
+        retrying(5) {
+            if (!log.readText().contains("inbound connection to 1.1.1.1:80")) nc()
+            assertTrue("the shell's TCP connection reached sing-box: ${log.readText().takeLast(3000)}", log.readText().contains("inbound connection to 1.1.1.1:80"))
+        }
+    }
+
     /** A server only Xray can run: VLESS over xhttp with REALITY, the way many panels hand them out. */
     @Test
     fun connectsThroughXray() {

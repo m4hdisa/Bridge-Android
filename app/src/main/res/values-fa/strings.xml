@@ -232,4 +232,8 @@
 
     <!-- 0.4.2 apps -->
     <string name="apps_full_hint">همه‌ی برنامه‌ها از VPN استفاده می‌کنند. برای انتخاب برنامه‌ها، بالا «برنامه‌محور» را بزنید.</string>
+
+    <!-- 0.4.3 -->
+    <string name="show_all">نمایش همه‌ی %1$d</string>
+    <string name="show_less">نمایش کمتر</string>
 </resources>

@@ -235,4 +235,8 @@
 
     <!-- 0.4.2 apps -->
     <string name="apps_full_hint">Every app uses the VPN. Choose Per-App above to pick apps.</string>
+
+    <!-- 0.4.3 -->
+    <string name="show_all">Show all %1$d</string>
+    <string name="show_less">Show fewer</string>
 </resources>

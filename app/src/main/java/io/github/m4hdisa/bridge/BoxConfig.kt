@@ -115,6 +115,9 @@ object BoxConfig {
         if (input.proxy != null) routeRules.put(JSONObject().put("inbound", JSONArray().put("bridge-in")).put("outbound", "proxy"))
         if (input.directIps.isNotEmpty()) routeRules.put(JSONObject().put("ip_cidr", JSONArray(input.directIps.map { if (':' in it) "$it/128" else "$it/32" })).put("outbound", "direct"))
         routeRules.put(JSONObject().put("ip_cidr", JSONArray().put(IRAN_FAKE_RANGE)).put("action", "reject"))
+        // IPv6 comes into the VPN (so it doesn't leak), but most servers and WARP only carry IPv4:
+        // refused at once, apps such as Telegram fall back to IPv4 instead of waiting.
+        routeRules.put(JSONObject().put("ip_version", 6).put("action", "reject"))
         // Without FakeIP, made-up addresses apps kept from an earlier connection lead nowhere:
         // refused at once, so the app asks for the real address instead of waiting.
         if (!input.fakeIp) routeRules.put(JSONObject().put("ip_cidr", JSONArray().put(FAKE_RANGE)).put("action", "reject"))
@@ -154,7 +157,11 @@ object BoxConfig {
                 .put("address", JSONArray().put("172.19.0.1/30").put("fdfe:dcba:9876::1/126"))
                 .put("mtu", 9000)
                 .put("auto_route", true)
-                .put("stack", "mixed"),
+                // gVisor for TCP too. "mixed" hands TCP to Android's own network stack, whose replies
+                // leave by the app's routes; Bridge is left out of the VPN (so Xray and Aether reach
+                // their servers directly), so those replies missed the VPN and no TCP connection ever
+                // opened: only UDP (QUIC) got through.
+                .put("stack", "gvisor"),
         )
         input.proxy?.let { p ->
             inbounds.put(
