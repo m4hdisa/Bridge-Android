@@ -121,8 +121,11 @@ jobs:
             echo "checking $config"
             ./sing-box check -c "$config"
           done
-          # The Android build of Xray for x86_64 runs on the build machine too.
-          app/src/main/jniLibs/x86_64/libxray.so run -test -c app/build/generated-configs/xray-process.json
+          # The Android builds need Android's loader, so the same Xray version's Linux build checks it.
+          curl -fsSL -o xray-linux.zip "https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip"
+          echo "0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  xray-linux.zip" | sha256sum -c -
+          unzip -o -q xray-linux.zip xray -d xray-linux
+          xray-linux/xray run -test -c app/build/generated-configs/xray-process.json
       - name: Build the APKs
         run: gradle --no-daemon :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Show the APK sizes
