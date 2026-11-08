@@ -355,7 +355,8 @@ fun WorldMap(home: String?, exitCountry: String?, exitAt: Pair<Double, Double>?,
         val right = maxOf(a?.x ?: b.x, b.x)
         val top = minOf(a?.y ?: b.y, b.y)
         val bottom = maxOf(a?.y ?: b.y, b.y)
-        val zoom = minOf(cols / maxOf((right - left) * 1.8f, 34f), rows / maxOf((bottom - top) * 2.2f, 13f)).coerceIn(1f, 4f)
+        // A gentle zoom: both places with plenty of map around them, never more than 2.2 times.
+        val zoom = minOf(cols / maxOf((right - left) * 3.2f, 60f), rows / maxOf((bottom - top) * 4f, 24f)).coerceIn(1f, 2.2f)
         val halfW = cols / (2 * zoom)
         val halfH = rows / (2 * zoom)
         Triple(zoom, ((left + right) / 2).coerceIn(halfW, cols - halfW), ((top + bottom) / 2).coerceIn(halfH, rows - halfH))
