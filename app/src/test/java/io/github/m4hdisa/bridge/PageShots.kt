@@ -40,11 +40,15 @@ class PageShots {
         context.getSharedPreferences("bridge", Context.MODE_PRIVATE).edit().clear().commit()
         val store = Store(context)
         val now = System.currentTimeMillis()
-        val sub = Subscription("sub", "https://panel.example.com/sub/abc123", "My provider", updatedAt = now - 3_600_000)
+        val sub = Subscription("sub", "https://panel.example.com/sub/abc123", "My provider", updatedAt = now - 3_600_000, usage = Usage(12_400_000_000, 50_000_000_000, now / 1000 + 18 * 86_400))
+        // Free WARP shows as it does on a phone that has Aether.
+        val libs = File("build/shot-libs").absoluteFile.apply { mkdirs() }
+        File(libs, "libaether.so").writeText("")
+        context.applicationInfo.nativeLibraryDir = libs.path
         store.replaceSubscription(
             sub,
             listOf(
-                "vless://$uuid@de1.example.com:443?type=tcp&security=reality&sni=www.google.com&pbk=KEY#Germany Reality",
+                "vless://$uuid@de1.example.com:443?type=tcp&security=reality&sni=www.google.com&pbk=KEY#🇩🇪 Germany Reality",
                 "vless://$uuid@nl1.example.com:443?type=xhttp&security=tls&sni=nl1.example.com#Amsterdam xhttp",
                 "trojan://pw@fi1.example.com:443?type=ws&security=tls#Helsinki",
                 "wireguard://x@wg.example.com:51820#WireGuard",
@@ -52,10 +56,12 @@ class PageShots {
         )
         store.addLinks(listOf("vmess://" + Base64Text.encode("""{"v":"2","ps":"Tokyo","add":"jp1.example.com","port":"443","id":"$uuid","net":"grpc","tls":"tls","path":"g"}""")))
         val ids = store.servers.associate { it.name to it.id }
-        store.setDelays(mapOf(ids.getValue("Germany Reality") to 84, ids.getValue("Amsterdam xhttp") to 412, ids.getValue("Helsinki") to -1, ids.getValue("Tokyo") to 162))
-        store.selected = ids.getValue("Germany Reality")
+        store.setDelays(mapOf(ids.getValue("🇩🇪 Germany Reality") to 84, ids.getValue("Amsterdam xhttp") to 412, ids.getValue("Helsinki") to -1, ids.getValue("Tokyo") to 162))
+        store.selected = ids.getValue("🇩🇪 Germany Reality")
         store.perApp = false
     }
+
+    private fun store() = Store(ApplicationProvider.getApplicationContext())
 
     private fun shoot(prefix: String) {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
@@ -68,18 +74,41 @@ class PageShots {
             VpnState.set(VpnState.Status.Running)
             scenario.onActivity { it.show(Screen.Home) }
             shadowOf(Looper.getMainLooper()).idle()
+            scenario.onActivity {
+                App.model(it).pretend(
+                    Health(Health.State.Ok, 84, "203.0.113.24", "DE", "Frankfurt am Main", 50.1 to 8.7),
+                    "IR",
+                    Traffic(808_000, 22_500, 412_000_000, 18_300_000),
+                    SpeedResult(down = 48.3, up = 12.6),
+                )
+            }
+            shadowOf(Looper.getMainLooper()).idle()
             compose.waitForIdle()
             compose.onRoot().captureRoboImage(File(out, "$prefix-home-connected.png").path)
             VpnState.set(VpnState.Status.Stopped)
+            shadowOf(Looper.getMainLooper()).idle()
+            // Free WARP chosen, while it looks for a way through.
+            scenario.onActivity { App.model(it).select(Warp.ID) }
+            VpnState.set(VpnState.Status.Starting)
+            VpnState.progress(R.string.progress_warp_search)
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage(File(out, "$prefix-home-warp-connecting.png").path)
+            VpnState.set(VpnState.Status.Stopped)
+            scenario.onActivity { it.show(Screen.Servers) }
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage(File(out, "$prefix-servers-warp.png").path)
+            scenario.onActivity { App.model(it).select(store().servers.first().id) }
             shadowOf(Looper.getMainLooper()).idle()
         }
     }
 
     @Test
-    @Config(qualifiers = "en-w400dp-h880dp-xxhdpi")
+    @Config(qualifiers = "en-w400dp-h1500dp-xxhdpi")
     fun english() = shoot("en")
 
     @Test
-    @Config(qualifiers = "fa-w400dp-h880dp-xxhdpi")
+    @Config(qualifiers = "fa-w400dp-h1500dp-xxhdpi")
     fun persian() = shoot("fa")
 }

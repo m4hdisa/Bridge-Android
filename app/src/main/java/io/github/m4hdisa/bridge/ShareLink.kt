@@ -347,7 +347,9 @@ object ShareLink {
 object Base64Text {
     private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-    fun decode(input: String): String {
+    fun decode(input: String): String = decodeBytes(input).toString(Charsets.UTF_8)
+
+    fun decodeBytes(input: String): ByteArray {
         val text = input.replace('-', '+').replace('_', '/').filterNot { it.isWhitespace() }.trimEnd('=')
         val out = ByteArrayOutputStream()
         var buffer = 0
@@ -362,7 +364,7 @@ object Base64Text {
                 out.write((buffer shr bits) and 0xFF)
             }
         }
-        return out.toString("UTF-8")
+        return out.toByteArray()
     }
 
     /** Standard alphabet, padded. */

@@ -146,8 +146,76 @@
     <string name="language_en" translatable="false">English</string>
     <string name="about">About</string>
     <string name="version">Version %1$s</string>
-    <string name="credits">Runs on sing-box (GPL-3.0-or-later) and Xray (MPL-2.0). Fonts: Geist and Vazirmatn (SIL OFL 1.1). Icons: Lucide (ISC) and Phosphor (MIT). Bridge is not associated with these projects.</string>
+    <string name="credits">Runs on sing-box (GPL-3.0-or-later), Xray (MPL-2.0), and for Free WARP, Aether (AGPL-3.0) and Psiphon (GPL-3.0). QR codes: ZXing (Apache-2.0). Fonts: Geist and Vazirmatn (SIL OFL 1.1). Icons: Lucide (ISC) and Phosphor (MIT). Bridge is not associated with these projects.</string>
     <string name="privacy_title">Privacy</string>
     <string name="privacy_hint">Your servers and settings stay on this phone. Bridge sends nothing about you anywhere.</string>
     <string name="no_servers">Add a server first</string>
+
+    <!-- 0.4.0: Free WARP, speed, subscriptions, QR -->
+    <string name="warp_name">Free WARP</string>
+    <string name="warp_badge">Free</string>
+    <string name="warp_hint">Cloudflare WARP, no config or subscription needed. Bridge finds a way through your network each time you connect, which can take up to a minute. Sites see a Cloudflare address, and some of them ask for a captcha.</string>
+    <string name="warp_use">Use</string>
+    <string name="warp_in_use">In use</string>
+    <string name="warp_method">Connection method</string>
+    <string name="warp_auto">Auto: fastest</string>
+    <string name="warp_foreign">Exit outside Iran</string>
+    <string name="warp_psiphon">WARP + Psiphon</string>
+    <string name="warp_auto_hint">Tries every fast way at once and keeps the fastest that works. The exit is usually registered in Iran: filtering is bypassed, but sites that block Iranian users may refuse.</string>
+    <string name="warp_foreign_hint">Also tries two ways with two hops and waits for them, because their exit is outside Iran. Connecting takes longer, up to a minute, and the speed is lower. If neither gets through it connects another way, with an exit in Iran, and for half an hour doesn\'t wait for them.</string>
+    <string name="warp_psiphon_hint">WARP from Iran usually exits in Iran. Psiphon, carried inside WARP, leaves from another country, so sites that refuse Iranian users open. It is slower, connecting takes up to a minute and a half longer, and calls and games that use UDP may not work. The traffic passes through the Psiphon network.</string>
+    <string name="warp_region">Exit country</string>
+    <string name="warp_region_any">Any country</string>
+    <string name="warp_unavailable">Free WARP needs Android 10 or newer.</string>
+    <string name="warp_psiphon_failed">Psiphon didn\'t connect through WARP within a minute and a half. Choose another connection method to use WARP alone.</string>
+    <string name="warp_no_account">Free WARP could not create a WARP account, because Cloudflare\'s WARP service is blocked on this network right now. Try again later or on another network.</string>
+    <string name="warp_no_way">Free WARP found no way through this network right now. The details are in Logs.</string>
+    <string name="warp_died">WARP stopped unexpectedly. The details are in Logs.</string>
+    <string name="warp_reconnect">Free WARP is used from the next connection.</string>
+    <string name="progress_warp_account">Creating a free WARP account (first time only)</string>
+    <string name="progress_warp_search">Finding a way through your network</string>
+    <string name="progress_warp_foreign">Found a way. Waiting a little longer for an exit outside Iran</string>
+    <string name="progress_psiphon">Connecting Psiphon through WARP for an exit outside Iran</string>
+    <string name="progress_starting">Starting the connection</string>
+    <string name="speed_title">Speed</string>
+    <string name="speed_down">Download</string>
+    <string name="speed_up">Upload</string>
+    <string name="speed_total">This connection: %1$s down, %2$s up</string>
+    <string name="speed_test">Test speed</string>
+    <string name="speed_testing">Testing…</string>
+    <string name="speed_mbps">%1$s Mbps</string>
+    <string name="speed_failed">The speed test didn\'t get through.</string>
+    <string name="speed_test_hint">Up to 70 MB through the VPN, from Cloudflare.</string>
+    <string name="stat_traffic">Traffic</string>
+    <string name="stat_traffic_of">%1$s of %2$s</string>
+    <string name="stat_traffic_left">%1$s left</string>
+    <string name="stat_unlimited">Unlimited</string>
+    <string name="stat_ends">Ends</string>
+    <string name="stat_no_end">No end date</string>
+    <string name="stat_ended">Ended</string>
+    <string name="fake_ip">Fast DNS (FakeIP)</string>
+    <string name="fake_ip_hint">New sites open without waiting for an address lookup: the server looks it up itself. Turn it off if an app that works by IP address breaks.</string>
+    <string name="server_qr">Show QR code</string>
+    <string name="qr_title">QR code</string>
+    <string name="qr_hint">Scan it with Bridge, or another app, on another phone. It holds the server\'s password: show it only to people you trust.</string>
+    <string name="menu_scan">Scan a QR code</string>
+    <string name="menu_scan_hint">A config\'s or subscription\'s QR code, with the camera.</string>
+    <string name="scan_prompt">Point the camera at the QR code</string>
+    <string name="close">Close</string>
+    <string name="tile_label">Bridge</string>
+
+    <!-- 0.4.0: Free WARP, speed, subscriptions, QR -->
+    <string name="connected_for">Connected for %1$s</string>
+    <string name="exit_finding">Finding where your traffic exits…</string>
+    <string name="exit_location">Exit location</string>
+    <string name="exit_in">Exit in %1$s</string>
+    <string name="map_you">You</string>
+    <string name="map_exit">Exit</string>
+    <string name="refresh_all">Update and test all</string>
+    <string name="subs_title">Subscriptions</string>
+    <string name="subs_none">No subscription yet. Add your provider\'s link, or use Free WARP above.</string>
+    <string name="sub_add">Add</string>
+    <string name="sub_updated_ago">Updated %1$s</string>
+    <string name="not_answering">Connected, but the server isn\'t answering</string>
+    <string name="configs_count">%1$d configs</string>
 </resources>

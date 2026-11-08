@@ -15,15 +15,17 @@ object Profile {
     fun input(store: Store, rulesDir: String?): BoxInput {
         val servers = store.servers
         val parsed = servers.mapNotNull { s -> runCatching { s.id to ShareLink.parse(s.link) }.getOrNull() }
-        if (parsed.isEmpty()) throw LinkException(if (servers.isEmpty()) "Add a server first" else "None of the servers can be used in this version")
         val selected = store.selected
+        // Free WARP needs no server of the user's own; BridgeVpnService adds its port.
+        if (parsed.isEmpty() && selected == Warp.ID) return BoxInput(emptyList(), selected, emptyList(), store.bypassIran, rulesDir, null, null, null, fakeIp = store.fakeIp)
+        if (parsed.isEmpty()) throw LinkException(if (servers.isEmpty()) "Add a server first" else "None of the servers can be used in this version")
         val kept = parsed.take(MAX_SERVERS).let { first ->
             if (first.any { it.first == selected }) first else first + parsed.filter { it.first == selected }
         }
         val usable = kept.map { it.first }.toSet()
         val publicIds = store.subscriptions.filter { it.public }.map { it.id }.toSet()
         val auto = Servers.autoGroup(servers.filter { it.id in usable }, publicIds, MAX_AUTO).map { it.id }
-        return BoxInput(kept, selected, auto, store.bypassIran, rulesDir, null, null, null)
+        return BoxInput(kept, selected, auto, store.bypassIran, rulesDir, null, null, null, fakeIp = store.fakeIp)
     }
 }
 

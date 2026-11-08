@@ -206,10 +206,32 @@ fun LazyListScope.settingsPage(model: AppModel) {
         }
         Spacer(Modifier.height(12.dp))
         BridgeCard {
+            Text(stringResource(R.string.mode), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(10.dp))
+            Segmented(
+                options = listOf(
+                    Triple(false, stringResource(R.string.mode_full), Icons.Globe),
+                    Triple(true, stringResource(R.string.mode_per_app), Icons.Split),
+                ),
+                selected = model.perApp,
+                onSelect = { model.changePerApp(it) },
+            )
+            Text(
+                stringResource(if (model.perApp) R.string.mode_per_app_hint else R.string.mode_full_hint),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        BridgeCard {
             Text(stringResource(R.string.connection), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             SettingRow(Icons.MapPin, stringResource(R.string.bypass_iran), stringResource(R.string.bypass_iran_hint)) {
                 BridgeSwitch(model.bypassIran, { model.changeBypassIran(it) })
+            }
+            HorizontalDivider(color = Bridge.border, modifier = Modifier.padding(vertical = 4.dp))
+            SettingRow(Icons.Zap, stringResource(R.string.fake_ip), stringResource(R.string.fake_ip_hint)) {
+                BridgeSwitch(model.fakeIp, { model.changeFakeIp(it) })
             }
         }
         Spacer(Modifier.height(12.dp))

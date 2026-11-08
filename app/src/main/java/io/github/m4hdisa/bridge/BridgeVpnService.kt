@@ -62,6 +62,13 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private var server: CommandServer? = null
     private var monitor: NetworkMonitor? = null
     private var xray: XrayProcess? = null
+    private var warp: WarpRunner? = null
+
+    /** Held while starting and while cleaning up, so a disconnect during a long start waits for it to let go. */
+    private val lock = Any()
+
+    @Volatile
+    private var stopping = false
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -70,20 +77,32 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             return START_NOT_STICKY
         }
         if (VpnState.status != VpnState.Status.Stopped) return START_NOT_STICKY
+        stopping = false
         VpnState.set(VpnState.Status.Starting)
         showNotification()
         Thread { startVpn() }.start()
         return START_NOT_STICKY
     }
 
-    private fun startVpn() {
+    private fun startVpn(): Unit = synchronized(lock) {
         try {
             val store = Store(this)
             val clash = LocalAccess(freePort(), "", secret())
             val proxy = LocalAccess(freePort(), secret().take(12), secret())
             val log = File(filesDir, LOG_FILE).apply { delete() }
             File(filesDir, XRAY_LOG_FILE).delete()
-            var input = Profile.input(store, Rules.install(this)).copy(logPath = log.path, clash = clash, proxy = proxy)
+            val warpLog = File(filesDir, WARP_LOG_FILE).apply { delete() }
+            var input = Profile.input(store, Rules.install(this))
+                .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = File(filesDir, CACHE_FILE).path)
+            if (store.selected == Warp.ID) {
+                val runner = WarpRunner(this, warpLog).also { warp = it }
+                val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }) {
+                    if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died))
+                }
+                if (stopping) return@synchronized
+                input = input.copy(warpPort = port)
+            }
+            VpnState.progress(R.string.progress_starting)
             val forXray = input.servers.filter { it.second.usesXray }
             if (forXray.isNotEmpty()) input = startXray(input, forXray, store.includeSelf)
             val built = BoxConfig.build(input)
@@ -103,11 +122,17 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                     }
                 },
             )
+            if (stopping) return@synchronized
             VpnState.session = VpnState.Session(clash, proxy, built.tags)
             VpnState.set(VpnState.Status.Running)
+            // The account a public starter one stood in for, made through the tunnel now that it works.
+            warp?.let { w -> Thread { runCatching { w.replaceStarterAccount(proxy) } }.apply { isDaemon = true }.start() }
+        } catch (e: WarpException) {
+            Log.e(TAG, "WARP failed", e)
+            if (!stopping) cleanUp(getString(e.res))
         } catch (e: Exception) {
             Log.e(TAG, "start failed", e)
-            cleanUp(e.message ?: e.toString())
+            if (!stopping) cleanUp(e.message ?: e.toString())
         }
     }
 
@@ -172,10 +197,15 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     private fun secret(): String = UUID.randomUUID().toString().replace("-", "")
 
-    private fun stopVpn() {
-        if (VpnState.status == VpnState.Status.Stopping) return
+    private fun stopVpn() = fail(null)
+
+    /** Disconnects, showing `error` if there is one. A start still running is stopped first. */
+    private fun fail(error: String?) {
+        if (stopping) return
+        stopping = true
         VpnState.set(VpnState.Status.Stopping)
-        Thread { cleanUp(null) }.start()
+        runCatching { warp?.stop() }
+        Thread { synchronized(lock) { cleanUp(error) } }.start()
     }
 
     private fun cleanUp(error: String?) {
@@ -187,6 +217,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         server = null
         runCatching { xray?.stop() }
         xray = null
+        runCatching { warp?.stop() }
+        warp = null
         runCatching { monitor?.stop() }
         monitor = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -427,6 +459,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         const val ACTION_STOP = "io.github.m4hdisa.bridge.STOP"
         const val LOG_FILE = "box.log"
         const val XRAY_LOG_FILE = "xray.log"
+        const val WARP_LOG_FILE = "warp.log"
+        private const val CACHE_FILE = "cache.db"
         private const val RESOLVE_TIMEOUT_MS = 5_000L
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"

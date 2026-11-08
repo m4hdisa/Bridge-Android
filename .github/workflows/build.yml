@@ -92,6 +92,8 @@ jobs:
           ls -l app/src/main/assets/rules
       - name: Get Xray, checked against known hashes
         run: bash .github/get-xray.sh
+      - name: Get Aether (Free WARP) and Psiphon, checked against known hashes
+        run: bash .github/get-aether.sh
       - name: Set up Java
         uses: actions/setup-java@v5
         with:

@@ -69,6 +69,10 @@ fun LazyListScope.serversPage(model: AppModel, onAdd: () -> Unit, onPublic: () -
         }
         Spacer(Modifier.height(16.dp))
     }
+    item(key = "warp") {
+        WarpCard(model)
+        Spacer(Modifier.height(12.dp))
+    }
     val servers = model.servers
     val subscriptions = model.subscriptions
     if (servers.isEmpty() && subscriptions.isEmpty()) {
@@ -205,6 +209,10 @@ private fun GroupCard(model: AppModel, subscription: Subscription?, servers: Lis
                 val updated = if (subscription.updatedAt > 0) DateUtils.getRelativeTimeSpanString(subscription.updatedAt).toString() else stringResource(R.string.sub_never)
                 Stat(stringResource(R.string.stat_updated), updated, stringResource(R.string.stat_auto_daily), Modifier.weight(1f))
             }
+            if (subscription.usage != null) {
+                Spacer(Modifier.height(8.dp))
+                UsageStats(subscription, Modifier.padding(end = 8.dp))
+            }
         }
         Spacer(Modifier.height(6.dp))
         for (server in usable) ServerRow(model, server)
@@ -239,6 +247,8 @@ fun ServerRow(model: AppModel, server: Server, onPicked: (() -> Unit)? = null) {
     val p = parsed.getOrNull()
     val on = server.id == model.selected
     var menu by remember { mutableStateOf(false) }
+    var qr by remember { mutableStateOf(false) }
+    if (qr) QrDialog(server.link, server.name) { qr = false }
     Box {
         Row(
             Modifier
@@ -279,6 +289,10 @@ fun ServerRow(model: AppModel, server: Server, onPicked: (() -> Unit)? = null) {
                 menu = false
                 copy(context, server.link)
             })
+            DropdownMenuItem(text = { Text(stringResource(R.string.server_qr)) }, leadingIcon = { Icon(Icons.QrCode, null, Modifier.size(16.dp)) }, onClick = {
+                menu = false
+                qr = true
+            })
             DropdownMenuItem(text = { Text(stringResource(R.string.remove), color = Bridge.destructive) }, leadingIcon = { Icon(Icons.Trash2, null, Modifier.size(16.dp), tint = Bridge.destructive) }, onClick = {
                 menu = false
                 model.removeServer(server)
@@ -289,13 +303,18 @@ fun ServerRow(model: AppModel, server: Server, onPicked: (() -> Unit)? = null) {
 
 /** What "Add servers" offers. */
 @Composable
-fun AddServersSheetContent(model: AppModel, onDone: () -> Unit, onEnter: () -> Unit, onPublic: () -> Unit) {
+fun AddServersSheetContent(model: AppModel, onDone: () -> Unit, onEnter: () -> Unit, onPublic: () -> Unit, onScan: () -> Unit) {
     val context = LocalContext.current
     Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
         Text(stringResource(R.string.add_servers), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp))
         SettingRow(Icons.ClipboardPaste, stringResource(R.string.menu_paste), stringResource(R.string.menu_paste_hint), onClick = {
             onDone()
             pasteInto(context, model)
+        })
+        HorizontalDivider(color = Bridge.border)
+        SettingRow(Icons.ScanLine, stringResource(R.string.menu_scan), stringResource(R.string.menu_scan_hint), onClick = {
+            onDone()
+            onScan()
         })
         HorizontalDivider(color = Bridge.border)
         SettingRow(Icons.Link2, stringResource(R.string.menu_enter), stringResource(R.string.menu_enter_hint), onClick = {
@@ -326,6 +345,28 @@ fun ServerPickerContent(model: AppModel, onDone: () -> Unit, onManage: () -> Uni
         }
         if (usable.isEmpty()) {
             item { Text(stringResource(R.string.empty_servers), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp)) }
+        }
+        if (model.warpAvailable) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().clip(ItemShape)
+                        .background(if (model.warpSelected) Bridge.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent)
+                        .combinedClickable(onClick = {
+                            model.select(io.github.m4hdisa.bridge.Warp.ID)
+                            onDone()
+                        })
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioMark(model.warpSelected)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.warp_name), style = MaterialTheme.typography.titleSmall)
+                        Text("Cloudflare WARP", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Badge(stringResource(R.string.warp_badge), Tone.Success)
+                }
+            }
         }
         if (model.servers.size > 1) {
             item {

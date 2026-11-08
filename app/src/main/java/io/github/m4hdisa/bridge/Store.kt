@@ -5,11 +5,28 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** A server the user added, by hand or from a subscription. Only the link is kept; it is parsed when needed. */
-data class Server(val id: String, val name: String, val link: String, val subscription: String? = null, val delay: Int? = null) {
+/**
+ * A server the user added, by hand or from a subscription. Only the link is kept; it is parsed
+ * when needed. `exit` is the country traffic left from when Bridge was connected through it, and
+ * `speed` the download speed its last speed test measured, in Mbps.
+ */
+data class Server(
+    val id: String,
+    val name: String,
+    val link: String,
+    val subscription: String? = null,
+    val delay: Int? = null,
+    val exit: String? = null,
+    val speed: Double? = null,
+) {
+    /** Where it is: the country seen when connected, or a guess from its name. */
+    val country: String? get() = exit ?: Regions.guess(name)
+
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("link", link).also { o ->
         subscription?.let { o.put("subscription", it) }
         delay?.let { o.put("delay", it) }
+        exit?.let { o.put("exit", it) }
+        speed?.let { o.put("speed", it) }
     }
 
     companion object {
@@ -19,6 +36,8 @@ data class Server(val id: String, val name: String, val link: String, val subscr
             o.getString("link"),
             o.optString("subscription").ifEmpty { null },
             if (o.has("delay")) o.getInt("delay") else null,
+            o.optString("exit").ifEmpty { null },
+            if (o.has("speed")) o.getDouble("speed") else null,
         )
 
         fun fromLink(link: String, subscription: String? = null, name: String? = null) =
@@ -26,12 +45,24 @@ data class Server(val id: String, val name: String, val link: String, val subscr
     }
 }
 
-/** A subscription URL. `public` marks the free public configs, which Auto uses only when there is nothing else. */
-data class Subscription(val id: String, val url: String, val name: String, val public: Boolean = false, val updatedAt: Long = 0) {
-    fun toJson(): JSONObject = JSONObject().put("id", id).put("url", url).put("name", name).put("public", public).put("updatedAt", updatedAt)
+/**
+ * A subscription URL. `public` marks the free public configs, which Auto uses only when there is
+ * nothing else. `usage` is the traffic and end date the panel reported, if it did.
+ */
+data class Subscription(val id: String, val url: String, val name: String, val public: Boolean = false, val updatedAt: Long = 0, val usage: Usage? = null) {
+    fun toJson(): JSONObject = JSONObject().put("id", id).put("url", url).put("name", name).put("public", public).put("updatedAt", updatedAt).also { o ->
+        usage?.let { o.put("used", it.used).put("total", it.total).put("expire", it.expire) }
+    }
 
     companion object {
-        fun fromJson(o: JSONObject) = Subscription(o.getString("id"), o.getString("url"), o.optString("name"), o.optBoolean("public"), o.optLong("updatedAt"))
+        fun fromJson(o: JSONObject) = Subscription(
+            o.getString("id"),
+            o.getString("url"),
+            o.optString("name"),
+            o.optBoolean("public"),
+            o.optLong("updatedAt"),
+            if (o.has("used") || o.has("total") || o.has("expire")) Usage(o.optLong("used"), o.optLong("total"), o.optLong("expire")) else null,
+        )
     }
 }
 
@@ -78,6 +109,21 @@ class Store(context: Context) {
         get() = prefs.getBoolean("bypassIran", true)
         set(value) = prefs.edit().putBoolean("bypassIran", value).apply()
 
+    /** Instant made-up DNS answers (see BoxConfig); off: real answers over DNS-over-HTTPS. */
+    var fakeIp: Boolean
+        get() = prefs.getBoolean("fakeIp", true)
+        set(value) = prefs.edit().putBoolean("fakeIp", value).apply()
+
+    /** How Free WARP connects. */
+    var warpChoice: Warp.Choice
+        get() = runCatching { Warp.Choice.valueOf(prefs.getString("warpChoice", null) ?: "") }.getOrDefault(Warp.Choice.Auto)
+        set(value) = prefs.edit().putString("warpChoice", value.name).apply()
+
+    /** Psiphon's exit country inside WARP, or null for any. */
+    var psiphonRegion: String?
+        get() = prefs.getString("psiphonRegion", null)
+        set(value) = prefs.edit().putString("psiphonRegion", value).apply()
+
     /** For the emulator test only: Bridge's own traffic normally skips the VPN, so it can reach servers directly. */
     var includeSelf: Boolean
         get() = prefs.getBoolean("includeSelf", false)
@@ -101,13 +147,18 @@ class Store(context: Context) {
     fun removeSubscription(id: String) {
         servers = servers.filter { it.subscription != id }
         subscriptions = subscriptions.filter { it.id != id }
-        if (servers.none { it.id == selected }) selected = AUTO
+        if (selected != Warp.ID && servers.none { it.id == selected }) selected = AUTO
     }
 
     @Synchronized
     fun removeServer(id: String) {
         servers = servers.filter { it.id != id }
         if (selected == id) selected = AUTO
+    }
+
+    @Synchronized
+    fun update(id: String, change: (Server) -> Server) {
+        servers = servers.map { if (it.id == id) change(it) else it }
     }
 
     @Synchronized

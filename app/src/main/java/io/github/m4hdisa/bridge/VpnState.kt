@@ -26,6 +26,18 @@ object VpnState {
     @Volatile
     var session: Session? = null
 
+    /** While connecting: what Bridge is doing now (a string resource), so a long connect is no mystery. */
+    @Volatile
+    var progress: Int? = null
+        private set
+
+    fun progress(res: Int?) {
+        main.post {
+            progress = res
+            listeners.toList().forEach { it() }
+        }
+    }
+
     fun addListener(listener: () -> Unit) {
         listeners += listener
     }
@@ -38,6 +50,7 @@ object VpnState {
         main.post {
             this.status = status
             this.error = error
+            if (status != Status.Starting) progress = null
             listeners.toList().forEach { it() }
         }
     }

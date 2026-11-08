@@ -18,8 +18,8 @@ android {
         // libbox.aar is built for Android 7 and up.
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -58,6 +58,9 @@ android {
             useLegacyPackaging = true
             // libxray.so is the Xray program itself (see .github/get-xray.sh), already stripped by its builders.
             keepDebugSymbols += "**/libxray.so"
+            // Aether and Psiphon, for Free WARP (see .github/get-aether.sh), are programs too.
+            keepDebugSymbols += "**/libaether.so"
+            keepDebugSymbols += "**/libpsiphon.so"
         }
     }
 
@@ -107,6 +110,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
+    // QR codes: ZXing (Apache-2.0) draws them, and its Android screen reads them with the camera.
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") { isTransitive = false }
 
     testImplementation("junit:junit:4.13.2")
     // Android's org.json only exists on a device; unit tests run on the build machine.

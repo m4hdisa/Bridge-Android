@@ -19,6 +19,7 @@ const lucide = {
   ScrollText: 'scroll-text', Languages: 'languages', MapPin: 'map-pin', Activity: 'activity', Cloud: 'cloud',
   Waypoints: 'waypoints', Ban: 'ban', ArrowRight: 'arrow-right', Gauge: 'gauge', Sparkles: 'sparkles', Pencil: 'pencil',
   KeyRound: 'key-round', Smartphone: 'smartphone', LoaderCircle: 'loader-circle',
+  ArrowDown: 'arrow-down', ArrowUp: 'arrow-up', QrCode: 'qr-code', ScanLine: 'scan-line',
 }
 const phosphor = { SquaresFour: 'SquaresFour', GlobeHemisphereWest: 'GlobeHemisphereWest', AppWindow: 'AppWindow', Scroll: 'Scroll', GearSix: 'GearSix' }
 

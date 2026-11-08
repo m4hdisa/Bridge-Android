@@ -59,6 +59,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import io.github.m4hdisa.bridge.ui.AddServersSheetContent
 import io.github.m4hdisa.bridge.ui.Bridge
 import io.github.m4hdisa.bridge.ui.BridgeTheme
@@ -97,6 +99,23 @@ class MainActivity : AppCompatActivity() {
         model.permissionResult(result.resultCode == RESULT_OK)
     }
 
+    /** The camera, for a config's or subscription's QR code (ZXing's own screen asks for the camera). */
+    private val scan = registerForActivityResult(ScanContract()) { result ->
+        result.contents?.takeIf { it.isNotBlank() }?.let {
+            page = Screen.Servers
+            model.addText(it)
+        }
+    }
+
+    private fun startScan() {
+        scan.launch(
+            ScanOptions()
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt(getString(R.string.scan_prompt))
+                .setBeepEnabled(false),
+        )
+    }
+
     // The app works without it; only the "connected" notification stays hidden.
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
@@ -106,7 +125,7 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState?.getString(PAGE)?.let { saved -> Screen.entries.firstOrNull { it.name == saved }?.let { page = it } }
         setContent {
             BridgeTheme {
-                BridgeApp(model, page, { page = it }, onConnect = { model.toggle { vpnPermission.launch(it) } })
+                BridgeApp(model, page, { page = it }, onConnect = { model.toggle { vpnPermission.launch(it) } }, onScan = { startScan() })
             }
         }
         model.loadApps()
@@ -133,6 +152,11 @@ class MainActivity : AppCompatActivity() {
 
     /** Links shared from another app, or opened from a browser. */
     private fun handleIncoming(intent: Intent?) {
+        // The quick settings tile, when Android first has to allow the VPN.
+        if (intent?.action == ACTION_CONNECT) {
+            if (model.status == VpnState.Status.Stopped) model.toggle { vpnPermission.launch(it) }
+            return
+        }
         val text = when (intent?.action) {
             Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
             Intent.ACTION_VIEW -> intent.dataString
@@ -142,14 +166,15 @@ class MainActivity : AppCompatActivity() {
         model.addText(text)
     }
 
-    private companion object {
-        const val PAGE = "page"
+    companion object {
+        private const val PAGE = "page"
+        const val ACTION_CONNECT = "io.github.m4hdisa.bridge.CONNECT"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, onConnect: () -> Unit) {
+private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, onConnect: () -> Unit, onScan: () -> Unit) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -194,7 +219,8 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
         bottomBar = { NavBar(page, onPage) },
     ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-            TopBar(model)
+            // No top bar: the dashboard says how the connection is under its button, and Settings has the version.
+            Spacer(Modifier.statusBarsPadding().height(8.dp))
             model.busy?.let { BusyBar(stringResource(it), Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
             val list = rememberLazyListState()
             LaunchedEffect(page) { list.scrollToItem(0) }
@@ -205,8 +231,8 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
                             model,
                             onConnect = onConnect,
                             onOpenServers = { onPage(Screen.Servers) },
-                            onPickServer = { if (model.servers.isEmpty()) onPage(Screen.Servers) else pickSheet = true },
                             onOpenApps = { onPage(Screen.Apps) },
+                            onAdd = { addSheet = true },
                         )
                     }
                     Screen.Servers -> serversPage(model, onAdd = { addSheet = true }, onPublic = { publicDialog = true })
@@ -220,7 +246,7 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
 
     if (addSheet) {
         ModalBottomSheet(onDismissRequest = { addSheet = false }, sheetState = rememberModalBottomSheetState(), containerColor = Bridge.popover) {
-            AddServersSheetContent(model, onDone = { addSheet = false }, onEnter = { enterDialog = true }, onPublic = { publicDialog = true })
+            AddServersSheetContent(model, onDone = { addSheet = false }, onEnter = { enterDialog = true }, onPublic = { publicDialog = true }, onScan = onScan)
         }
     }
     if (pickSheet) {
@@ -246,36 +272,6 @@ private fun BridgeApp(model: AppModel, page: Screen, onPage: (Screen) -> Unit, o
             onPage(Screen.Servers)
             model.findPublic()
         }, onDismiss = { publicDialog = false })
-    }
-}
-
-/** The logo and name, with the connection state on the other side. */
-@Composable
-private fun TopBar(model: AppModel) {
-    Row(
-        Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LogoMark()
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
-        }
-        val (color, text) = when (model.status) {
-            VpnState.Status.Running -> Bridge.success to R.string.status_on
-            VpnState.Status.Stopped -> Bridge.mutedForeground to R.string.status_off
-            VpnState.Status.Starting -> Bridge.brand to R.string.status_starting
-            VpnState.Status.Stopping -> Bridge.brand to R.string.status_stopping
-        }
-        Row(
-            Modifier.clip(ItemShape).background(Bridge.card).padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            StatusDot(color, pulse = model.status == VpnState.Status.Starting || model.status == VpnState.Status.Stopping)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(text), style = MaterialTheme.typography.labelMedium)
-        }
     }
 }
 

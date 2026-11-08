@@ -56,27 +56,9 @@ object Net {
     }
 
     private fun once(proxy: LocalAccess, url: URL, timeoutMs: Int): Page {
-        val https = url.protocol == "https"
-        val port = if (url.port > 0) url.port else url.defaultPort
         val socket = Socket()
         try {
-            socket.connect(InetSocketAddress("127.0.0.1", proxy.port), timeoutMs)
-            socket.soTimeout = timeoutMs
-            val auth = android.util.Base64.encodeToString("${proxy.user}:${proxy.secret}".toByteArray(), android.util.Base64.NO_WRAP)
-            write(socket.getOutputStream(), "CONNECT ${url.host}:$port HTTP/1.1\r\nHost: ${url.host}:$port\r\nProxy-Authorization: Basic $auth\r\n\r\n")
-            val raw = socket.getInputStream()
-            val status = readLine(raw)
-            while (readLine(raw).isNotEmpty()) Unit
-            if (status.split(' ').getOrNull(1) != "200") throw IOException("the VPN's proxy answered: $status")
-            val stream: Socket = if (https) {
-                val ssl = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(socket, url.host, port, true) as SSLSocket
-                ssl.soTimeout = timeoutMs
-                ssl.startHandshake()
-                if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(url.host, ssl.session)) throw IOException("the certificate is not for ${url.host}")
-                ssl
-            } else {
-                socket
-            }
+            val stream = open(socket, proxy, url, timeoutMs)
             val path = (url.path.ifEmpty { "/" }) + (url.query?.let { "?$it" } ?: "")
             write(stream.getOutputStream(), "GET $path HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: $USER_AGENT\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
             return readResponse(stream.getInputStream())
@@ -84,6 +66,79 @@ object Net {
             runCatching { socket.close() }
         }
     }
+
+    /** A connection to `url`'s host through the VPN's local proxy (HTTP CONNECT with a password), with TLS for https. */
+    private fun open(socket: Socket, proxy: LocalAccess, url: URL, timeoutMs: Int): Socket {
+        val port = if (url.port > 0) url.port else url.defaultPort
+        socket.connect(InetSocketAddress("127.0.0.1", proxy.port), timeoutMs)
+        socket.soTimeout = timeoutMs
+        val auth = android.util.Base64.encodeToString("${proxy.user}:${proxy.secret}".toByteArray(), android.util.Base64.NO_WRAP)
+        write(socket.getOutputStream(), "CONNECT ${url.host}:$port HTTP/1.1\r\nHost: ${url.host}:$port\r\nProxy-Authorization: Basic $auth\r\n\r\n")
+        val raw = socket.getInputStream()
+        val status = readLine(raw)
+        while (readLine(raw).isNotEmpty()) Unit
+        if (status.split(' ').getOrNull(1) != "200") throw IOException("the VPN's proxy answered: $status")
+        if (url.protocol != "https") return socket
+        val ssl = (SSLSocketFactory.getDefault() as SSLSocketFactory).createSocket(socket, url.host, port, true) as SSLSocket
+        ssl.soTimeout = timeoutMs
+        ssl.startHandshake()
+        if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(url.host, ssl.session)) throw IOException("the certificate is not for ${url.host}")
+        return ssl
+    }
+
+    private const val SPEED_HOST = "https://speed.cloudflare.com"
+    private const val SPEED_NANOS = 8_000_000_000L
+
+    /** Download speed through the VPN in Mbps: as much of 50 MB as comes in 8 seconds. */
+    fun downloadSpeed(proxy: LocalAccess): Double {
+        val url = URL("$SPEED_HOST/__down?bytes=50000000")
+        val socket = Socket()
+        try {
+            val stream = open(socket, proxy, url, 15_000)
+            write(stream.getOutputStream(), "GET ${url.path}?${url.query} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: $USER_AGENT\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n")
+            val input = stream.getInputStream()
+            val status = readLine(input)
+            if (status.split(' ').getOrNull(1) != "200") throw IOException("the speed test answered: $status")
+            while (readLine(input).isNotEmpty()) Unit
+            val buffer = ByteArray(64 * 1024)
+            val started = System.nanoTime()
+            var bytes = 0L
+            while (System.nanoTime() - started < SPEED_NANOS) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                bytes += n
+            }
+            return mbps(bytes, System.nanoTime() - started)
+        } finally {
+            runCatching { socket.close() }
+        }
+    }
+
+    /** Upload speed through the VPN in Mbps: as much of 20 MB as goes out in 8 seconds. */
+    fun uploadSpeed(proxy: LocalAccess): Double {
+        val url = URL("$SPEED_HOST/__up")
+        val size = 20_000_000L
+        val socket = Socket()
+        try {
+            val stream = open(socket, proxy, url, 15_000)
+            val out = stream.getOutputStream()
+            write(out, "POST ${url.path} HTTP/1.1\r\nHost: ${url.host}\r\nUser-Agent: $USER_AGENT\r\nContent-Type: application/octet-stream\r\nContent-Length: $size\r\nConnection: close\r\n\r\n")
+            val chunk = ByteArray(64 * 1024)
+            val started = System.nanoTime()
+            var sent = 0L
+            while (sent < size && System.nanoTime() - started < SPEED_NANOS) {
+                val n = minOf(chunk.size.toLong(), size - sent).toInt()
+                out.write(chunk, 0, n)
+                sent += n
+            }
+            out.flush()
+            return mbps(sent, System.nanoTime() - started)
+        } finally {
+            runCatching { socket.close() }
+        }
+    }
+
+    private fun mbps(bytes: Long, nanos: Long): Double = if (nanos <= 0) 0.0 else bytes * 8.0 / (nanos / 1e9) / 1e6
 
     private fun readResponse(input: InputStream): Page {
         val status = readLine(input)

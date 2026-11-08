@@ -42,6 +42,28 @@ object Clash {
         DELAY_FAILED
     }
 
+    /**
+     * Follows the speed: the Clash API sends {"up":…,"down":…} in bytes once a second until the
+     * connection closes or `going` turns false.
+     */
+    fun traffic(access: LocalAccess, going: () -> Boolean, sample: (up: Long, down: Long) -> Unit) {
+        val connection = URL("http://127.0.0.1:${access.port}/traffic").openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 3_000
+            connection.readTimeout = 5_000
+            connection.setRequestProperty("Authorization", "Bearer ${access.secret}")
+            connection.inputStream.bufferedReader().use { reader ->
+                while (going()) {
+                    val line = reader.readLine() ?: break
+                    val o = runCatching { JSONObject(line) }.getOrNull() ?: continue
+                    sample(o.optLong("up"), o.optLong("down"))
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     /** The outbound tag traffic goes through now, looking inside Auto. */
     fun current(access: LocalAccess): String? = try {
         val now = JSONObject(call(access, "GET", "/proxies/proxy").second).optString("now")
@@ -51,7 +73,20 @@ object Clash {
     }
 }
 
-class FetchResult(val links: List<String>, val title: String?)
+class FetchResult(val links: List<String>, val title: String?, val usage: Usage? = null)
+
+/** A subscription's "subscription-userinfo" header: traffic used and allowed, in bytes, and when it ends (Unix seconds). */
+data class Usage(val used: Long, val total: Long, val expire: Long) {
+    companion object {
+        fun parse(header: String?): Usage? {
+            if (header.isNullOrBlank()) return null
+            val fields = header.split(";").associate { it.substringBefore("=").trim().lowercase() to it.substringAfter("=", "").trim() }
+            fun n(key: String) = fields[key]?.toDoubleOrNull()?.toLong() ?: 0L
+            val usage = Usage(n("upload") + n("download"), n("total"), n("expire"))
+            return usage.takeIf { it.used > 0 || it.total > 0 || it.expire > 0 }
+        }
+    }
+}
 
 object Subscriptions {
     /** Directly first; if that fails while connected, through the VPN, since many lists are blocked in Iran. */
@@ -83,7 +118,7 @@ object Subscriptions {
             panelSubscription(url)?.let { other -> links = runCatching { ShareLink.extract(download(other).body) }.getOrDefault(emptyList()) }
         }
         if (links.isEmpty()) throw IOException(noLinksReason(page.body))
-        return FetchResult(links, title(page.headers["profile-title"]))
+        return FetchResult(links, title(page.headers["profile-title"]), Usage.parse(page.headers["subscription-userinfo"]))
     }
 
     /** A BPB panel's own address (…/panel, …/login or …/sub) leads to its plain list. Its fragment list is JSON for Xray. */

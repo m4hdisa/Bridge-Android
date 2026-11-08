@@ -24,6 +24,12 @@ data class BoxInput(
     val xrayPorts: Map<String, Int> = emptyMap(),
     val xrayAuth: LocalAccess? = null,
     val directIps: List<String> = emptyList(),
+    /** Free WARP's local SOCKS port (Aether, or Psiphon inside it), when it is the server in use. */
+    val warpPort: Int? = null,
+    /** Instant made-up answers for names (see build); off: real answers over DNS-over-HTTPS. */
+    val fakeIp: Boolean = true,
+    /** sing-box's cache file, which keeps the made-up answers across reconnects. */
+    val cachePath: String? = null,
 )
 
 /** The config, and each server's outbound tag in it. */
@@ -32,14 +38,26 @@ data class BuiltConfig(val json: String, val tags: Map<String, String>)
 /**
  * Builds the sing-box config. Android itself decides which apps enter the VPN (see
  * BridgeVpnService), so everything that reaches sing-box goes through the server, except
- * Iranian sites when bypassIran is on. Names resolve over DNS-over-HTTPS through the server,
- * so Iran's fake answers (10.10.34.x) don't reach the apps.
+ * Iranian sites when bypassIran is on.
+ *
+ * DNS, with fakeIp (the default, as in Full VPN on Windows): every A/AAAA question gets an
+ * instant made-up address from 198.18.0.0/15, and sing-box swaps it back for the name when the
+ * app connects, so the server looks the site up itself. A new site then opens without waiting
+ * for a lookup through the server first. Other questions, and every one without fakeIp, go over
+ * DNS-over-HTTPS through the server, so Iran's fake answers (10.10.34.x) don't reach the apps.
+ * Anything still sent to 10.10.34.x (an app that cached Iran's answer) is refused at once
+ * instead of hanging.
  *
  * Every server is in the config behind one selector, so switching servers while connected
  * needs no reconnect, and each can be tested through the Clash API.
  */
 object BoxConfig {
     const val TEST_URL = "https://www.gstatic.com/generate_204"
+    const val WARP_TAG = "warp"
+    const val FAKE_RANGE = "198.18.0.0/15"
+
+    /** Where Iran's DNS points blocked sites. */
+    const val IRAN_FAKE_RANGE = "10.10.34.0/24"
 
     fun build(input: BoxInput): BuiltConfig {
         val tags = LinkedHashMap<String, String>()
@@ -57,9 +75,15 @@ object BoxConfig {
             tags[id] = tag
             outbounds.put(outbound.put("tag", tag))
         }
+        // Free WARP is never in Auto: it is only in the config when it was chosen.
+        val autoCandidates = tags.values.toList()
+        input.warpPort?.let { port ->
+            tags[Warp.ID] = WARP_TAG
+            outbounds.put(JSONObject().put("type", "socks").put("tag", WARP_TAG).put("server", "127.0.0.1").put("server_port", port).put("version", "5"))
+        }
         require(tags.isNotEmpty()) { "no servers" }
-        val autoTags = input.auto.mapNotNull { tags[it] }.ifEmpty { tags.values.toList() }
-        val useAuto = tags.size > 1
+        val autoTags = input.auto.mapNotNull { id -> tags[id]?.takeIf { it != WARP_TAG } }.ifEmpty { autoCandidates }
+        val useAuto = autoCandidates.size > 1
         val choices = JSONArray()
         if (useAuto) {
             outbounds.put(
@@ -75,7 +99,7 @@ object BoxConfig {
             choices.put(AUTO)
         }
         tags.values.forEach { choices.put(it) }
-        val default = tags[input.selected] ?: if (useAuto) AUTO else tags.values.first()
+        val default = tags[input.selected] ?: if (useAuto) AUTO else autoCandidates.firstOrNull() ?: WARP_TAG
         outbounds.put(JSONObject().put("type", "selector").put("tag", "proxy").put("outbounds", choices).put("default", default).put("interrupt_exist_connections", true))
         outbounds.put(JSONObject().put("type", "direct").put("tag", "direct"))
 
@@ -86,6 +110,7 @@ object BoxConfig {
             .put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
         if (input.proxy != null) routeRules.put(JSONObject().put("inbound", JSONArray().put("bridge-in")).put("outbound", "proxy"))
         if (input.directIps.isNotEmpty()) routeRules.put(JSONObject().put("ip_cidr", JSONArray(input.directIps.map { if (':' in it) "$it/128" else "$it/32" })).put("outbound", "direct"))
+        routeRules.put(JSONObject().put("ip_cidr", JSONArray().put(IRAN_FAKE_RANGE)).put("action", "reject"))
         routeRules.put(JSONObject().put("ip_is_private", true).put("outbound", "direct"))
         if (input.bypassIran) {
             dnsRules.put(JSONObject().put("domain_suffix", JSONArray().put(".ir")).put("server", "local"))
@@ -95,6 +120,9 @@ object BoxConfig {
                 routeRules.put(JSONObject().put("rule_set", JSONArray().put("geosite-ir").put("geoip-ir")).put("outbound", "direct"))
             }
         }
+
+        // After the Iranian rules, so Iranian sites still get their real addresses from the phone's DNS.
+        if (input.fakeIp) dnsRules.put(JSONObject().put("query_type", JSONArray().put("A").put("AAAA")).put("server", "fake"))
 
         val route = JSONObject()
             .put("rules", routeRules)
@@ -141,18 +169,23 @@ object BoxConfig {
                         "servers",
                         JSONArray()
                             .put(JSONObject().put("type", "https").put("tag", "remote").put("server", "1.1.1.1").put("detour", "proxy"))
-                            .put(JSONObject().put("type", "local").put("tag", "local")),
+                            .put(JSONObject().put("type", "local").put("tag", "local"))
+                            .also { if (input.fakeIp) it.put(JSONObject().put("type", "fakeip").put("tag", "fake").put("inet4_range", FAKE_RANGE)) },
                     )
                     .put("rules", dnsRules)
                     .put("final", "remote")
-                    .put("strategy", "ipv4_only"),
+                    .put("strategy", "ipv4_only")
+                    // An answer just past its TTL is used at once and refreshed behind the scenes.
+                    .put("optimistic", JSONObject().put("enabled", true).put("timeout", "1h")),
             )
             .put("inbounds", inbounds)
             .put("outbounds", outbounds)
             .put("route", route)
-        input.clash?.let { c ->
-            config.put("experimental", JSONObject().put("clash_api", JSONObject().put("external_controller", "127.0.0.1:${c.port}").put("secret", c.secret)))
-        }
+        val experimental = JSONObject()
+        input.clash?.let { c -> experimental.put("clash_api", JSONObject().put("external_controller", "127.0.0.1:${c.port}").put("secret", c.secret)) }
+        // store_fakeip keeps the made-up answers across reconnects, so apps that kept one still work.
+        input.cachePath?.let { experimental.put("cache_file", JSONObject().put("enabled", true).put("path", it).put("store_fakeip", input.fakeIp)) }
+        if (experimental.length() > 0) config.put("experimental", experimental)
         return BuiltConfig(config.toString(2), tags)
     }
 }
