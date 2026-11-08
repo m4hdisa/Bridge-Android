@@ -59,10 +59,10 @@ class ConnectTest {
         fail("timed out waiting for $what (status ${VpnState.status}, error ${VpnState.error})")
     }
 
-    private fun startVpn() {
+    private fun startVpn(timeoutMs: Long = 30_000) {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { ContextCompat.startForegroundService(it, Intent(it, BridgeVpnService::class.java)) }
-            waitFor(30_000, "the VPN to start") { VpnState.status == VpnState.Status.Running || VpnState.error != null }
+            waitFor(timeoutMs, "the VPN to start") { VpnState.status == VpnState.Status.Running || VpnState.error != null }
         }
         assertNull("start error", VpnState.error)
         assertNotNull(VpnState.session)
@@ -139,6 +139,32 @@ class ConnectTest {
         val page = retrying(5) { URL("https://example.com/").readText() }
         assertTrue("example.com through Xray", page.contains("Example Domain"))
         assertTrue("Clash API measures the Xray server", Clash.delay(session.clash, "proxy", 8_000) > 0)
+    }
+
+    /**
+     * Free WARP for real: Aether makes a WARP account at Cloudflare, finds a way through and
+     * serves it; Cloudflare then says the request came over WARP. Aether runs as Bridge, so Bridge
+     * stays off the VPN, as on a phone, and the check goes through Bridge's own local proxy.
+     */
+    @Test
+    fun connectsThroughWarp() {
+        if (!WarpRunner.isAvailable(context)) return
+        val store = Store(context)
+        store.selected = Warp.ID
+        store.perApp = false
+        store.includeSelf = false
+        val log = File(context.filesDir, BridgeVpnService.WARP_LOG_FILE)
+        try {
+            startVpn(240_000)
+            val session = VpnState.session!!
+            val trace = retrying(5) { Net.through(session.proxy, "https://www.cloudflare.com/cdn-cgi/trace").body }
+            assertTrue("traffic leaves through WARP: $trace", Regex("^warp=(on|plus)$", RegexOption.MULTILINE).containsMatchIn(trace))
+            assertTrue("Clash API measures WARP", Clash.delay(session.clash, "proxy", 10_000) > 0)
+        } catch (e: Throwable) {
+            throw AssertionError("${e.message}
+--- warp.log ---
+${runCatching { log.readText().takeLast(6000) }.getOrDefault("")}", e)
+        }
     }
 
     @Test
