@@ -224,6 +224,7 @@
     <string name="show_less">Show fewer</string>
 
     <!-- 0.4.4: the new screens -->
+    <string name="auto_tile">Fastest of %1$d</string>
     <string name="used">Used</string>
     <string name="could_not_connect">Couldn\'t connect</string>
     <string name="status_off_empty">Add a server to start</string>

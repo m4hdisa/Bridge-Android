@@ -260,7 +260,8 @@ private fun SmartTiles(model: AppModel, usable: Int, onPick: (String) -> Unit, o
                 stringResource(warpLabel(model.warpChoice)),
                 { onPick(Warp.ID) },
                 onWarpOptions,
-                Modifier.weight(1f),
+                // It also holds the "more" button, so it gets the extra room.
+                Modifier.weight(if (auto) 1.25f else 1f),
             )
         }
         if (auto) {
@@ -268,7 +269,7 @@ private fun SmartTiles(model: AppModel, usable: Int, onPick: (String) -> Unit, o
                 model.autoSelected,
                 { Icon(Icons.Zap, null, Modifier.size(20.dp), tint = Bridge.brand) },
                 stringResource(R.string.auto_name),
-                stringResource(R.string.auto_hint_short, usable),
+                stringResource(R.string.auto_tile, usable),
                 { onPick(AUTO) },
                 null,
                 Modifier.weight(1f),

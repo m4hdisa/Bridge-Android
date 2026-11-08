@@ -110,4 +110,8 @@ class PageShots {
     @Test
     @Config(qualifiers = "fa-w400dp-h840dp-xxhdpi")
     fun persian() = shoot("fa")
+
+    @Test
+    @Config(qualifiers = "en-w360dp-h640dp-xxhdpi")
+    fun aNarrowPhone() = shoot("narrow")
 }

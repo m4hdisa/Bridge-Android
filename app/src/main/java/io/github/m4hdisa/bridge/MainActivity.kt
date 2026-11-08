@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -265,6 +266,11 @@ private fun NavBar(page: Screen, onPage: (Screen) -> Unit) {
     )
     val current = if (page == Screen.Apps) Screen.Settings else page
     val pill = androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
+    // The bar has to fit between the screen's edges: narrower icons first, then no name beside the chosen one.
+    val config = LocalConfiguration.current
+    val room = config.screenWidthDp / config.fontScale
+    val iconWidth = if (room >= 400) 60.dp else if (room >= 360) 52.dp else 48.dp
+    val showName = room >= 360
     // A floating bar as wide as what's in it: the chosen page grows into a lit pill with its name; the others are icons.
     Box(Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
         Row(
@@ -282,7 +288,7 @@ private fun NavBar(page: Screen, onPage: (Screen) -> Unit) {
                 Row(
                     Modifier
                         .height(50.dp)
-                        .then(if (on) Modifier else Modifier.width(60.dp))
+                        .then(if (on) Modifier else Modifier.width(iconWidth))
                         .clip(androidx.compose.foundation.shape.RoundedCornerShape(25.dp))
                         .background(if (on) Bridge.primary.copy(alpha = 0.2f) else androidx.compose.ui.graphics.Color.Transparent)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPage(target) }
@@ -292,7 +298,7 @@ private fun NavBar(page: Screen, onPage: (Screen) -> Unit) {
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     Icon(if (on) icons.second else icons.first, stringResource(label), Modifier.size(24.dp), tint = if (on) Bridge.brand else Bridge.mutedForeground)
-                    if (on) {
+                    if (on && showName) {
                         Spacer(Modifier.width(8.dp))
                         Text(stringResource(label), style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold), color = Bridge.brand, maxLines = 1)
                     }

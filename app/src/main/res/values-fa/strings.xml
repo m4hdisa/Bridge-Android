@@ -221,6 +221,7 @@
     <string name="show_less">نمایش کمتر</string>
 
     <!-- 0.4.4: the new screens -->
+    <string name="auto_tile">سریع‌ترینِ %1$d</string>
     <string name="used">مصرف</string>
     <string name="could_not_connect">وصل نشد</string>
     <string name="status_off_empty">برای شروع یک سرور اضافه کنید</string>
