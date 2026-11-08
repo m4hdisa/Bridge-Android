@@ -93,7 +93,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             File(filesDir, XRAY_LOG_FILE).delete()
             val warpLog = File(filesDir, WARP_LOG_FILE).apply { delete() }
             var input = Profile.input(store, Rules.install(this))
-                .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = File(filesDir, CACHE_FILE).path)
+                .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = freshCacheFile().path)
             if (store.selected == Warp.ID) {
                 val runner = WarpRunner(this, warpLog).also { warp = it }
                 val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }) {
@@ -191,6 +191,18 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         } finally {
             pool.shutdownNow()
         }
+    }
+
+    /**
+     * A cache file of its own for this connection. On Android sing-box always keeps one (by
+     * default files/cache.db) and locks it; if an earlier connection didn't let go of its lock,
+     * every later start failed with "initialize cache-file: timeout" until the app was closed.
+     * Older ones are deleted; one still held by a stuck instance just goes once that ends.
+     */
+    private fun freshCacheFile(): File {
+        File(filesDir, "cache.db").delete()
+        cacheDir.listFiles { f -> f.name.startsWith(CACHE_PREFIX) }?.forEach { it.delete() }
+        return File(cacheDir, "$CACHE_PREFIX${System.currentTimeMillis()}.db")
     }
 
     private fun freePort(): Int = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
@@ -460,7 +472,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         const val LOG_FILE = "box.log"
         const val XRAY_LOG_FILE = "xray.log"
         const val WARP_LOG_FILE = "warp.log"
-        private const val CACHE_FILE = "cache.db"
+        private const val CACHE_PREFIX = "box-cache-"
         private const val RESOLVE_TIMEOUT_MS = 5_000L
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"
