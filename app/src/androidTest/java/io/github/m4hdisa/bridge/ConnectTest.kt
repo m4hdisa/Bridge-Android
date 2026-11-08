@@ -161,9 +161,8 @@ class ConnectTest {
             assertTrue("traffic leaves through WARP: $trace", Regex("^warp=(on|plus)$", RegexOption.MULTILINE).containsMatchIn(trace))
             assertTrue("Clash API measures WARP", Clash.delay(session.clash, "proxy", 10_000) > 0)
         } catch (e: Throwable) {
-            throw AssertionError("${e.message}
---- warp.log ---
-${runCatching { log.readText().takeLast(6000) }.getOrDefault("")}", e)
+            val tail = runCatching { log.readText().takeLast(6000) }.getOrDefault("")
+            throw AssertionError("${e.message}\n--- warp.log ---\n$tail", e)
         }
     }
 
