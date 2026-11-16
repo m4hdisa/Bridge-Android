@@ -21,6 +21,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -289,12 +290,12 @@ private fun SmartTiles(model: AppModel, usable: Int, warpOpen: Boolean, onWarp: 
                 warpLocationName(model.warpLocation),
                 onWarp,
                 {
-                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.width(32.dp), contentAlignment = Alignment.Center) {
                         Icon(Icons.ChevronDown, null, Modifier.size(20.dp).rotate(turn), tint = if (warpOpen) Bridge.brand else Bridge.mutedForeground)
                     }
                 },
-                // It also holds the arrow, so it gets the extra room.
-                Modifier.weight(if (auto) 1.4f else 1f),
+                // It also holds the arrow, so it gets the extra room: "Free WARP" must fit on a 320dp phone.
+                Modifier.weight(if (auto) 1.5f else 1f),
             )
         }
         if (auto) {
@@ -337,7 +338,7 @@ private fun SmartTile(on: Boolean, lead: @Composable () -> Unit, title: String, 
 
 /**
  * Free WARP's locations, in its box under the tiles: Fastest and Any country side by side, then
- * Iran and Psiphon's countries two to a row, and what the chosen one means.
+ * Iran and Psiphon's countries (two to a row where they fit), and what the chosen one means.
  */
 @Composable
 private fun WarpLocations(model: AppModel) {
@@ -353,14 +354,18 @@ private fun WarpLocations(model: AppModel) {
             LocationOption(chosen == Warp.ANY, null, stringResource(R.string.warp_any), stringResource(R.string.warp_through_psiphon), Modifier.weight(1f)) { model.changeWarpLocation(Warp.ANY) }
         }
         HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Bridge.border)
-        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (row in (listOf(Warp.IRAN) + Warp.PSIPHON_REGIONS).chunked(2)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (code in row) {
-                        val warpOnly = code == Warp.IRAN
-                        CountryChip(chosen == code, code, if (warpOnly) stringResource(R.string.warp_only) else "Psiphon", warpOnly, Modifier.weight(1f)) { model.changeWarpLocation(code) }
+        // Two to a row, or one where "United Kingdom" wouldn't fit beside another (phones under about 380dp).
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val perRow = if (maxWidth < 330.dp) 1 else 2
+            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (row in (listOf(Warp.IRAN) + Warp.PSIPHON_REGIONS).chunked(perRow)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (code in row) {
+                            val warpOnly = code == Warp.IRAN
+                            CountryChip(chosen == code, code, if (warpOnly) stringResource(R.string.warp_only) else "Psiphon", warpOnly, Modifier.weight(1f)) { model.changeWarpLocation(code) }
+                        }
+                        if (row.size < perRow) Spacer(Modifier.weight(1f))
                     }
-                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
         }
