@@ -115,7 +115,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                     return@synchronized
                 }
                 val died = { if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died)) }
-                val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }, died)
+                val port = runner.start(store.warpLocation, { VpnState.progress(it) }, died)
                 if (stopping) return@synchronized
                 input = input.copy(warpPort = port)
             }

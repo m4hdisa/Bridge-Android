@@ -52,27 +52,29 @@ class WarpRunner(private val context: Context, private val log: File) {
 
     /**
      * Connects and returns the local SOCKS port sing-box should use. `progress` gets a string
-     * resource for the dashboard; `onDied` runs if the tunnel stops later on.
+     * resource for the dashboard; `onDied` runs if the tunnel stops later on. `location` is
+     * Free WARP's location (Warp.FASTEST and the rest): Psiphon rides inside WARP for a country.
      */
-    fun start(choice: Warp.Choice, region: String?, progress: (Int) -> Unit, onDied: () -> Unit): Int {
+    fun start(location: String, progress: (Int) -> Unit, onDied: () -> Unit): Int {
         if (!available) throw WarpException(R.string.warp_unavailable, "Free WARP needs Android 10 or newer")
         dir.mkdirs()
         ensureAccount(progress)
-        val psiphon = choice == Warp.Choice.Psiphon && psiphonBin.exists()
-        val methods = Warp.methods(choice)
+        val psiphon = Warp.usesPsiphon(location) && psiphonBin.exists()
+        val region = Warp.psiphonRegion(location)
+        val methods = Warp.Method.entries
         // The way and gateway that worked last time go first, alone and without a scan: that
         // takes seconds. Only if they don't work any more is every way tried.
-        val last = lastWay()?.takeIf { (method, _) -> method in methods && (choice != Warp.Choice.Foreign || method.twoHops) }
+        val last = lastWay()
         val won = last?.let { (method, gateway) ->
             note("Free WARP: trying ${method.label} on $gateway, which worked last time")
             try {
-                race(listOf(method), false, psiphon, region, progress, gateway, QUICK_MS)
+                race(listOf(method), psiphon, region, progress, gateway, QUICK_MS)
             } catch (e: WarpException) {
                 note("Free WARP: it doesn't work now; looking for another way")
                 File(dir, LAST_WAY_FILE).delete()
                 null
             }
-        } ?: race(methods, choice == Warp.Choice.Foreign, psiphon, region, progress)
+        } ?: race(methods, psiphon, region, progress)
         won.gateway?.let { gateway -> runCatching { File(dir, LAST_WAY_FILE).writeText("${won.method.name} $gateway") } }
         val port = keep(won, onDied)
         if (won.psiphonPort == null) return port
@@ -204,13 +206,9 @@ class WarpRunner(private val context: Context, private val log: File) {
         return false
     }
 
-    /**
-     * Runs the methods at once, each on its own port. The first that works wins; with a foreign
-     * exit wanted, one with two hops gets a minute longer, since its exit is outside Iran.
-     */
+    /** Runs the methods at once, each on its own port. The first that works wins. */
     private fun race(
         methods: List<Warp.Method>,
-        foreign: Boolean,
         psiphon: Boolean,
         region: String?,
         progress: (Int) -> Unit,
@@ -220,15 +218,11 @@ class WarpRunner(private val context: Context, private val log: File) {
         val results = LinkedBlockingQueue<Any>()
         if (peer == null) note("Free WARP: looking for a way through (${methods.joinToString { it.label }})")
         progress(if (peer != null) R.string.progress_starting else R.string.progress_warp_search)
-        val state = File(dir, STATE_FILE)
-        val missedAt = runCatching { state.readText().trim().toLong() }.getOrDefault(0L)
-        val waitForTwoHops = foreign && System.currentTimeMillis() - missedAt >= TWO_HOPS_RETRY_MS
         for (method in methods) {
             val port = freePort()
             val psiphonPort = if (psiphon) freePort() else null
             val args = Warp.args(method, port, config, psiphonPort?.let { Warp.Psiphon(psiphonBin.path, it, region) }, peer)
             var won = false
-            var refused = 0
             var gateway: String? = null
             val process = launch(args, "warp ${method.name.lowercase()}") { process, text ->
                 if (won) {
@@ -236,12 +230,9 @@ class WarpRunner(private val context: Context, private val log: File) {
                     return@launch
                 }
                 Warp.exitCountry(text)?.let { exit = it }
-                // The first gateway is the outer hop with two hops, the one to try first next time.
+                // The gateway, to try first next time.
                 if (gateway == null) gateway = Warp.gateway(text)
-                if (Warp.EXIT_REFUSED.containsMatchIn(text) && ++refused >= Warp.MAX_EXIT_REFUSED) {
-                    process.destroy()
-                    results.offer(Lost(method, "Cloudflare gave it an Iranian exit $refused times"))
-                } else if (Warp.NO_IPV6.containsMatchIn(text)) {
+                if (Warp.NO_IPV6.containsMatchIn(text)) {
                     process.destroy()
                     results.offer(Lost(method, "this network has no IPv6"))
                 } else if (Warp.ready(text, port)) {
@@ -254,40 +245,22 @@ class WarpRunner(private val context: Context, private val log: File) {
                 if (!won) results.offer(Lost(method, "stopped"))
             }.apply { isDaemon = true }.start()
         }
-        val wanted = methods.filter { it.twoHops }.toMutableSet()
         var pending = methods.size
-        var fallback: Won? = null
-        var waitUntil = Long.MAX_VALUE
         val deadline = System.currentTimeMillis() + timeoutMs
         val reasons = mutableListOf<String>()
-        fun finish(w: Won): Won {
-            for (p in processes) if (p !== w.process) p.destroy()
-            processes.retainAll(setOf(w.process))
-            if (foreign) runCatching { state.writeText(if (w.method.twoHops) "0" else System.currentTimeMillis().toString()) }
-            return w
-        }
-        while (true) {
+        while (System.currentTimeMillis() < deadline) {
             checkCancelled()
-            val now = System.currentTimeMillis()
-            fallback?.let { if (now >= waitUntil) return finish(it) }
-            if (fallback == null && now >= deadline) break
             when (val r = results.poll(500, TimeUnit.MILLISECONDS)) {
                 is Won -> {
-                    if (!waitForTwoHops || r.method.twoHops || wanted.isEmpty()) return finish(r)
-                    if (fallback == null) {
-                        fallback = r
-                        waitUntil = now + TWO_HOPS_WAIT_MS
-                        note("Free WARP: ${r.method.label} works; waiting up to ${TWO_HOPS_WAIT_MS / 1000} s for a way with two hops, which exits outside Iran")
-                        progress(R.string.progress_warp_foreign)
-                    }
+                    for (p in processes) if (p !== r.process) p.destroy()
+                    processes.retainAll(setOf(r.process))
+                    return r
                 }
                 is Lost -> {
                     pending--
-                    wanted -= r.method
                     reasons += "${r.method.label}: ${r.reason}"
                     note("Free WARP: ${r.method.label} ${r.reason}")
-                    fallback?.let { if (wanted.isEmpty()) return finish(it) }
-                    if (pending == 0 && fallback == null) break
+                    if (pending == 0) break
                 }
             }
         }
@@ -376,17 +349,12 @@ class WarpRunner(private val context: Context, private val log: File) {
 
     companion object {
         private const val TAG = "Bridge"
-        private const val STATE_FILE = "bridge-warp-state"
         private const val LAST_WAY_FILE = "bridge-warp-last"
         private const val QUICK_MS = 20_000L
         private val ACCOUNT_LOCK = Any()
         private const val TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace"
         private const val ATTEMPT_MS = 75_000L
         private const val REGISTER_MS = 90_000L
-        private const val TWO_HOPS_WAIT_MS = 60_000L
-
-        /** After the two-hop ways miss, how long the foreign choice connects without waiting for them. */
-        private const val TWO_HOPS_RETRY_MS = 30 * 60 * 1000L
         private const val PSIPHON_READY_MS = 90_000L
 
         fun isAvailable(context: Context) =

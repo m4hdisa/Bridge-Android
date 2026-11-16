@@ -114,15 +114,10 @@ class Store(context: Context) {
         get() = prefs.getBoolean("fakeIp2", false)
         set(value) = prefs.edit().putBoolean("fakeIp2", value).apply()
 
-    /** How Free WARP connects. */
-    var warpChoice: Warp.Choice
-        get() = runCatching { Warp.Choice.valueOf(prefs.getString("warpChoice", null) ?: "") }.getOrDefault(Warp.Choice.Auto)
-        set(value) = prefs.edit().putString("warpChoice", value.name).apply()
-
-    /** Psiphon's exit country inside WARP, or null for any. */
-    var psiphonRegion: String?
-        get() = prefs.getString("psiphonRegion", null)
-        set(value) = prefs.edit().putString("psiphonRegion", value).apply()
+    /** Free WARP's location (Warp.FASTEST, Warp.IRAN, Warp.ANY or a country Psiphon leaves from). */
+    var warpLocation: String
+        get() = Warp.location(prefs.getString("warpLocation", null))
+        set(value) = prefs.edit().putString("warpLocation", value).apply()
 
     /** When GitHub last answered about updates, in milliseconds. */
     var lastUpdateCheck: Long
@@ -215,9 +210,24 @@ class Store(context: Context) {
     }
 
     /** 0.1.0 kept one link. */
+    /**
+     * 0.4.5 and older had a connection method and a separate Psiphon country. Psiphon with a
+     * country becomes that country, Psiphon with none "Any country", and the rest Fastest, since
+     * the foreign-exit method is gone.
+     */
+    private fun moveWarpChoice() {
+        if (!prefs.contains("warpChoice") && !prefs.contains("psiphonRegion")) return
+        if (!prefs.contains("warpLocation")) {
+            val location = if (prefs.getString("warpChoice", null) == "Psiphon") prefs.getString("psiphonRegion", null) ?: Warp.ANY else Warp.FASTEST
+            prefs.edit().putString("warpLocation", Warp.location(location)).apply()
+        }
+        prefs.edit().remove("warpChoice").remove("psiphonRegion").apply()
+    }
+
     private fun migrate() {
         dropInfoConfigs()
         dropWarpConfigs()
+        moveWarpChoice()
         val old = prefs.getString("link", null) ?: return
         if (old.isNotBlank() && !prefs.contains("servers")) {
             val server = Server.fromLink(old)

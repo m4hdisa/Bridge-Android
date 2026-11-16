@@ -84,8 +84,10 @@ class WarpTest {
     fun aetherNeverWaitsForInput() {
         val args = Warp.args(Warp.Method.H2_FRAGMENT, 40000, "/data/warp/aether.toml")
         assertEquals(listOf("--masque", "--h2", "--fragment", "-4", "--scan", "turbo", "--quick-reconnect", "--bind", "127.0.0.1:40000", "--config", "/data/warp/aether.toml"), args)
-        val gool = Warp.args(Warp.Method.GOOL, 40001, "c", Warp.Psiphon("/lib/libpsiphon.so", 40002, "DE"))
-        assertTrue(gool.containsAll(listOf("--gool", "verified", "--exit-loc", "!IR", "--psiphon", "--psiphon-bind", "127.0.0.1:40002", "--psiphon-region", "DE")))
+        val psiphon = Warp.args(Warp.Method.H2, 40001, "c", Warp.Psiphon("/lib/libpsiphon.so", 40002, "DE"))
+        assertTrue(psiphon.containsAll(listOf("--psiphon", "--psiphon-bin", "/lib/libpsiphon.so", "--psiphon-bind", "127.0.0.1:40002", "--psiphon-region", "DE")))
+        assertFalse(psiphon.contains("--exit-loc"))
+        assertEquals(listOf("--peer", "162.159.198.1:443"), Warp.args(Warp.Method.H3, 1, "c", peer = "162.159.198.1:443").let { it.subList(it.indexOf("--peer"), it.indexOf("--peer") + 2) })
         assertEquals(listOf("--register", "masque", "--fragment", "--config", "c"), Warp.registerArgs("c", listOf("--fragment")))
         assertEquals(listOf("--register", "masque", "--upstream", "socks5://u:p@127.0.0.1:1", "--config", "c"), Warp.registerArgs("c", upstream = "socks5://u:p@127.0.0.1:1"))
     }
@@ -97,8 +99,23 @@ class WarpTest {
         assertTrue(Warp.ready(text, 40000))
         assertFalse(Warp.ready(text, 40001))
         assertEquals("IR", Warp.exitCountry("masque exit: 104.28.214.161, IR via FRA, rtt 80ms"))
-        assertEquals(Warp.Method.entries.filter { it.twoHops }, Warp.methods(Warp.Choice.Foreign).filter { it.twoHops })
-        assertTrue(Warp.methods(Warp.Choice.Psiphon).none { it.twoHops })
+    }
+
+    @Test
+    fun locationsAreWarpAloneOrPsiphonInsideIt() {
+        // Fastest and Iran are WARP alone; Any country and the countries are Psiphon, as on Windows.
+        assertFalse(Warp.usesPsiphon(Warp.FASTEST))
+        assertFalse(Warp.usesPsiphon(Warp.IRAN))
+        assertTrue(Warp.usesPsiphon(Warp.ANY))
+        assertTrue(Warp.usesPsiphon("DE"))
+        assertNull(Warp.psiphonRegion(Warp.ANY))
+        assertNull(Warp.psiphonRegion(Warp.IRAN))
+        assertEquals("JP", Warp.psiphonRegion("JP"))
+        assertEquals(listOf("", "auto", "IR") + Warp.PSIPHON_REGIONS, Warp.LOCATIONS)
+        // Something this version doesn't offer is Fastest.
+        assertEquals(Warp.FASTEST, Warp.location(null))
+        assertEquals(Warp.FASTEST, Warp.location("XX"))
+        assertEquals("SG", Warp.location("SG"))
     }
 
     private fun shareLink(identity: String): String {
@@ -150,7 +167,7 @@ class WarpTest {
         assertTrue(Warp.isGateway("162.159.198.1:443"))
         assertFalse(Warp.isGateway("1.2.3.4:443"))
         assertEquals("162.159.198.131:443", Warp.gateway("[+] using cloudflare edge 162.159.198.131:443"))
-        assertTrue(Warp.args(Warp.Method.MIM_H2, 1, "c", peer = "188.114.97.3:443").containsAll(listOf("--mim-outer", "188.114.97.3:443", "--quick-reconnect")))
+        assertTrue(Warp.args(Warp.Method.H2, 1, "c", peer = "188.114.97.3:443").containsAll(listOf("--peer", "188.114.97.3:443", "--quick-reconnect")))
     }
 
     @Test

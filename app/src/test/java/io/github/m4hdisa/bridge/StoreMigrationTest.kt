@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
-/** What a phone that had saved WARP configs (0.4.2 and 0.4.3) finds after updating. */
+/** What a phone that had saved WARP configs (0.4.2 and 0.4.3) or a WARP method (0.4.5 and older) finds after updating. */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = Application::class)
 class StoreMigrationTest {
@@ -26,6 +26,17 @@ class StoreMigrationTest {
         updateFrom("warp:abc")
         assertEquals(Warp.ID, Store(context).selected)
         assertFalse(prefs.contains("warpConfigs"))
+    }
+
+    @Test
+    fun theOldWarpMethodBecomesALocation() {
+        // Psiphon with a country is that country, Psiphon with none any country, the rest Fastest.
+        for ((choice, region, location) in listOf(Triple("Psiphon", "DE", "DE"), Triple("Psiphon", null, Warp.ANY), Triple("Foreign", null, Warp.FASTEST), Triple("Auto", "NL", Warp.FASTEST))) {
+            prefs.edit().clear().putString("warpChoice", choice).apply { if (region != null) putString("psiphonRegion", region) }.commit()
+            assertEquals(location, Store(context).warpLocation)
+            assertFalse(prefs.contains("warpChoice"))
+            assertFalse(prefs.contains("psiphonRegion"))
+        }
     }
 
     @Test

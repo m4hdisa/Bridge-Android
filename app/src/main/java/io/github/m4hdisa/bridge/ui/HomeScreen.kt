@@ -67,6 +67,7 @@ import io.github.m4hdisa.bridge.R
 import io.github.m4hdisa.bridge.Server
 import io.github.m4hdisa.bridge.Traffic
 import io.github.m4hdisa.bridge.VpnState
+import io.github.m4hdisa.bridge.Warp
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -226,7 +227,7 @@ private fun ConnectionCard(model: AppModel, canConnect: Boolean, mapHeight: Dp) 
                     Text(stringResource(R.string.not_answering), style = MaterialTheme.typography.bodyMedium, color = Bridge.warning, modifier = Modifier.weight(1f))
                     IconAction(Icons.RefreshCw, stringResource(R.string.health_check_now), { model.checkNow() })
                 }
-                health.country != null -> ExitDetails(model.warpSelected, health)
+                health.country != null -> ExitDetails(model, health)
                 else -> {
                     Lead { Icon(Icons.Globe, null, Modifier.size(20.dp), tint = Bridge.mutedForeground) }
                     Text(stringResource(R.string.exit_finding), style = MaterialTheme.typography.bodyMedium, color = Bridge.mutedForeground, modifier = Modifier.weight(1f))
@@ -240,7 +241,7 @@ private fun ConnectionCard(model: AppModel, canConnect: Boolean, mapHeight: Dp) 
 
 @Composable
 private fun Lead(content: @Composable () -> Unit) {
-    Box(Modifier.width(26.dp), contentAlignment = Alignment.Center) { content() }
+    Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) { content() }
     Spacer(Modifier.width(10.dp))
 }
 
@@ -253,20 +254,28 @@ private fun TitleAndLine(title: String, line: String, modifier: Modifier = Modif
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.ExitDetails(warp: Boolean, health: Health) {
+private fun androidx.compose.foundation.layout.RowScope.ExitDetails(model: AppModel, health: Health) {
     val country = health.country ?: return
+    // WARP by the connection itself: a server picked since, or one Auto moved to, isn't WARP.
+    val warp = model.throughWarp
     Lead {
-        if (warp) {
-            Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
-        } else {
-            FlagIcon(country, width = 24.dp)
-        }
+        if (warp) WarpMark(country, Bridge.card) else FlagIcon(country, width = 24.dp)
     }
-    TitleAndLine(
-        if (warp) "Cloudflare WARP" else countryName(country),
-        if (warp) stringResource(R.string.exit_in, countryName(country)) else health.city ?: stringResource(R.string.exit_location),
-        Modifier.weight(1f),
-    )
+    if (warp) {
+        val psiphon = Warp.usesPsiphon(model.warpLocation)
+        Column(Modifier.weight(1f)) {
+            Text("Cloudflare WARP", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Psiphon never leaves from Iran, so an Iranian exit means it didn't connect and WARP alone did.
+            if (psiphon && country == "IR") {
+                Text(stringResource(R.string.warp_fell_back), style = MaterialTheme.typography.bodySmall, color = Bridge.warning, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            } else {
+                val exit = stringResource(R.string.exit_in, countryName(country))
+                Text(if (psiphon) "$exit · ${stringResource(R.string.warp_through_psiphon)}" else exit, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    } else {
+        TitleAndLine(countryName(country), health.city ?: stringResource(R.string.exit_location), Modifier.weight(1f))
+    }
     Spacer(Modifier.width(8.dp))
     Column(horizontalAlignment = Alignment.End) {
         health.ip?.let { Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = GeistMono), maxLines = 1) }
@@ -317,14 +326,18 @@ private fun ServerBox(model: AppModel, onOpen: () -> Unit) {
         Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Lead {
                 when {
-                    warp -> Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 26.dp, height = 16.dp))
+                    warp -> WarpMark(warpShownCode(model), Bridge.card)
                     auto -> Icon(Icons.Zap, null, Modifier.size(20.dp), tint = Bridge.brand)
                     shown != null -> ServerFlag(shown)
                     else -> Icon(Icons.Globe, null, Modifier.size(20.dp), tint = Bridge.mutedForeground)
                 }
             }
             when {
-                warp -> TitleAndLine(stringResource(R.string.warp_name), "Cloudflare WARP", Modifier.weight(1f))
+                warp -> TitleAndLine(
+                    stringResource(R.string.warp_name),
+                    warpLocationName(model.warpLocation).let { if (Warp.usesPsiphon(model.warpLocation)) "$it · ${stringResource(R.string.warp_through_psiphon)}" else it },
+                    Modifier.weight(1f),
+                )
                 auto -> TitleAndLine(
                     stringResource(R.string.auto_name),
                     model.activeServer()?.takeIf { model.running }?.let { stringResource(R.string.auto_now, displayName(it)) } ?: stringResource(R.string.auto_hint_short, model.servers.size),
@@ -467,8 +480,8 @@ private fun MapKey(color: Color, text: String, country: String?) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(5.dp))
         Text(text, style = MaterialTheme.typography.labelSmall, color = Bridge.mutedForeground)
-        // Iran's flag is never shown, so no flag at all there.
-        if (country != null && country != "IR") {
+        // Iran's is plain stripes (FlagIcon), like everywhere else.
+        if (country != null) {
             Spacer(Modifier.width(5.dp))
             FlagIcon(country, width = 14.dp)
         }

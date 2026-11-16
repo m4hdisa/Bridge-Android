@@ -7,6 +7,12 @@ import android.os.Build
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,9 +24,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +39,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -49,15 +59,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -80,7 +94,6 @@ private const val TAB_MANUAL = "manual"
 private sealed interface Sheet {
     data class Config(val server: Server) : Sheet
     data class Source(val subscription: Subscription?, val servers: List<Server>) : Sheet
-    data object WarpOptions : Sheet
 }
 
 /**
@@ -110,6 +123,8 @@ fun ServersPage(model: AppModel, onAdd: () -> Unit, onPublic: () -> Unit, onPick
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     var qr by remember { mutableStateOf<Server?>(null) }
     var showUnusable by remember(tab) { mutableStateOf(false) }
+    // Free WARP's box opens in place to show its locations, like a section of configs.
+    var warpOpen by rememberSaveable { mutableStateOf(false) }
     val tabs = buildList {
         add(TAB_ALL)
         addAll(subscriptions.filter { s -> servers.any { it.subscription == s.id } || s.id in model.updating }.map { it.id })
@@ -162,7 +177,22 @@ fun ServersPage(model: AppModel, onAdd: () -> Unit, onPublic: () -> Unit, onPick
                 }
                 return@LazyColumn
             }
-            item(key = "smart") { SmartTiles(model, usable.size, { pick(it) }, { sheet = Sheet.WarpOptions }) }
+            item(key = "smart") {
+                SmartTiles(model, usable.size, warpOpen, {
+                    // The first tap puts Free WARP in use and opens it; later taps open and close it.
+                    if (!model.warpSelected) {
+                        model.select(Warp.ID)
+                        warpOpen = true
+                    } else {
+                        warpOpen = !warpOpen
+                    }
+                }) { pick(it) }
+            }
+            if (model.warpAvailable) {
+                item(key = "warp") {
+                    AnimatedVisibility(warpOpen, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { WarpLocations(model) }
+                }
+            }
             if (servers.isEmpty() && subscriptions.isEmpty()) {
                 item(key = "empty") { EmptyServers(model, onAdd, onPublic) }
                 return@LazyColumn
@@ -229,9 +259,6 @@ fun ServersPage(model: AppModel, onAdd: () -> Unit, onPublic: () -> Unit, onPick
         is Sheet.Source -> ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Bridge.popover) {
             SourceSheet(model, open.subscription, open.servers) { sheet = null }
         }
-        Sheet.WarpOptions -> ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = Bridge.popover) {
-            WarpSheet(model)
-        }
         null -> Unit
     }
 }
@@ -247,21 +274,27 @@ private fun fastestFirst(servers: List<Server>): List<Server> = servers.sortedBy
 }
 
 @Composable
-private fun SmartTiles(model: AppModel, usable: Int, onPick: (String) -> Unit, onWarpOptions: () -> Unit) {
+private fun SmartTiles(model: AppModel, usable: Int, warpOpen: Boolean, onWarp: () -> Unit, onPick: (String) -> Unit) {
     val warp = model.warpAvailable
     val auto = usable > 1
     if (!warp && !auto) return
     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (warp) {
+            val on = model.warpSelected
+            val turn by animateFloatAsState(if (warpOpen) 180f else 0f, label = "warp chevron")
             SmartTile(
-                model.warpSelected,
-                { Image(painterResource(R.drawable.ic_cloudflare), null, Modifier.size(width = 24.dp, height = 14.dp)) },
+                on,
+                { WarpMark(warpShownCode(model), if (on) TileOn.compositeOver(Bridge.card) else Bridge.card) },
                 stringResource(R.string.warp_name),
-                stringResource(warpLabel(model.warpChoice)),
-                { onPick(Warp.ID) },
-                onWarpOptions,
-                // It also holds the "more" button, so it gets the extra room.
-                Modifier.weight(if (auto) 1.25f else 1f),
+                warpLocationName(model.warpLocation),
+                onWarp,
+                {
+                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.ChevronDown, null, Modifier.size(20.dp).rotate(turn), tint = if (warpOpen) Bridge.brand else Bridge.mutedForeground)
+                    }
+                },
+                // It also holds the arrow, so it gets the extra room.
+                Modifier.weight(if (auto) 1.4f else 1f),
             )
         }
         if (auto) {
@@ -278,31 +311,115 @@ private fun SmartTiles(model: AppModel, usable: Int, onPick: (String) -> Unit, o
     }
 }
 
-private fun warpLabel(choice: Warp.Choice) = when (choice) {
-    Warp.Choice.Auto -> R.string.warp_auto
-    Warp.Choice.Foreign -> R.string.warp_foreign
-    Warp.Choice.Psiphon -> R.string.warp_psiphon
-}
+private val TileOn = Bridge.primary.copy(alpha = 0.16f)
 
 @Composable
-private fun SmartTile(on: Boolean, lead: @Composable () -> Unit, title: String, line: String, onClick: () -> Unit, onMore: (() -> Unit)?, modifier: Modifier) {
+private fun SmartTile(on: Boolean, lead: @Composable () -> Unit, title: String, line: String, onClick: () -> Unit, trailing: (@Composable () -> Unit)?, modifier: Modifier) {
     Row(
         modifier
             .heightIn(min = 64.dp)
             .clip(CardShape)
-            .background(if (on) Bridge.primary.copy(alpha = 0.16f) else Bridge.card)
-            .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.55f) else Bridge.border, CardShape),
+            .background(if (on) TileOn else Bridge.card)
+            .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.55f) else Bridge.border, CardShape)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = if (trailing != null) 0.dp else 2.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.weight(1f).heightIn(min = 64.dp).clickable(onClick = onClick).padding(start = 12.dp, end = 2.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.width(24.dp), contentAlignment = Alignment.Center) { lead() }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(line, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) { lead() }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(line, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        trailing?.invoke()
+    }
+}
+
+/**
+ * Free WARP's locations, in its box under the tiles: Fastest and Any country side by side, then
+ * Iran and Psiphon's countries two to a row, and what the chosen one means.
+ */
+@Composable
+private fun WarpLocations(model: AppModel) {
+    val chosen = model.warpLocation
+    Column(
+        Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)
+            .clip(CardShape).background(Bridge.card).border(1.dp, Bridge.brand.copy(alpha = 0.35f), CardShape)
+            .padding(12.dp),
+    ) {
+        Text(stringResource(R.string.warp_location), style = MaterialTheme.typography.labelMedium, color = Bridge.mutedForeground, modifier = Modifier.padding(start = 2.dp, bottom = 8.dp))
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LocationOption(chosen == Warp.FASTEST, FASTEST_MARK, stringResource(R.string.warp_fastest), stringResource(R.string.warp_fastest_note), Modifier.weight(1f)) { model.changeWarpLocation(Warp.FASTEST) }
+            LocationOption(chosen == Warp.ANY, null, stringResource(R.string.warp_any), stringResource(R.string.warp_through_psiphon), Modifier.weight(1f)) { model.changeWarpLocation(Warp.ANY) }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Bridge.border)
+        Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (row in (listOf(Warp.IRAN) + Warp.PSIPHON_REGIONS).chunked(2)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (code in row) {
+                        val warpOnly = code == Warp.IRAN
+                        CountryChip(chosen == code, code, if (warpOnly) stringResource(R.string.warp_only) else "Psiphon", warpOnly, Modifier.weight(1f)) { model.changeWarpLocation(code) }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
         }
-        if (onMore != null) IconAction(Icons.Ellipsis, stringResource(R.string.more), onMore)
+        Row(Modifier.padding(top = 12.dp).fillMaxWidth().clip(ItemShape).background(Bridge.muted).padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Icon(Icons.Info, null, Modifier.padding(top = 1.dp).size(18.dp), tint = Bridge.brand)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                if (Warp.usesPsiphon(chosen)) {
+                    Text(stringResource(R.string.warp_psiphon_hint), style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(R.string.warp_fallback_hint), style = MaterialTheme.typography.bodySmall, color = Bridge.foreground)
+                } else {
+                    Text(stringResource(R.string.warp_auto_hint), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocationOption(on: Boolean, code: String?, title: String, note: String, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .fillMaxHeight()
+            .heightIn(min = 96.dp)
+            .clip(CardShape)
+            .background(if (on) TileOn else Color.Transparent)
+            .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.55f) else Bridge.border, CardShape)
+            .selectable(on, role = Role.RadioButton, onClick = onClick)
+            .padding(12.dp),
+    ) {
+        Column {
+            RoundFlag(code, 28.dp)
+            Spacer(Modifier.height(8.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, color = if (on) Bridge.brand else Bridge.foreground)
+            Text(note, style = MaterialTheme.typography.bodySmall)
+        }
+        if (on) Icon(Icons.Check, null, Modifier.align(Alignment.TopEnd).size(20.dp), tint = Bridge.brand)
+    }
+}
+
+@Composable
+private fun CountryChip(on: Boolean, code: String, note: String, warpOnly: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .heightIn(min = 52.dp)
+            .clip(ItemShape)
+            .background(if (on) TileOn else Color.Transparent)
+            .border(1.dp, if (on) Bridge.brand.copy(alpha = 0.55f) else Bridge.border, ItemShape)
+            .selectable(on, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RoundFlag(code, 24.dp)
+        Spacer(Modifier.width(9.dp))
+        Column(Modifier.weight(1f)) {
+            Text(countryName(code), style = MaterialTheme.typography.titleSmall, color = if (on) Bridge.brand else Bridge.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(note, style = MaterialTheme.typography.labelSmall, color = if (warpOnly) Bridge.brand else Bridge.mutedForeground, maxLines = 1)
+        }
     }
 }
 
@@ -520,55 +637,6 @@ private fun SourceSheet(model: AppModel, subscription: Subscription?, servers: L
         RemoveRow(stringResource(if (subscription != null && !subscription.public) R.string.remove_subscription else R.string.remove_all)) {
             if (subscription != null) model.removeSubscription(subscription) else servers.forEach { model.removeServer(it) }
             onDone()
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun WarpSheet(model: AppModel) {
-    Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-        SheetTitle(stringResource(R.string.warp_name))
-        Text(stringResource(R.string.warp_method), style = MaterialTheme.typography.bodySmall)
-        for (choice in Warp.Choice.entries) {
-            Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(ItemShape).clickable { model.changeWarpChoice(choice) }, verticalAlignment = Alignment.CenterVertically) {
-                RadioMark(model.warpChoice == choice)
-                Spacer(Modifier.width(12.dp))
-                Text(stringResource(warpLabel(choice)), style = MaterialTheme.typography.titleSmall)
-            }
-        }
-        if (model.warpChoice == Warp.Choice.Psiphon) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                RegionChip(null, model.psiphonRegion == null) { model.changePsiphonRegion(null) }
-                for (code in Warp.PSIPHON_REGIONS) RegionChip(code, model.psiphonRegion == code) { model.changePsiphonRegion(code) }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            stringResource(
-                when (model.warpChoice) {
-                    Warp.Choice.Auto -> R.string.warp_auto_hint
-                    Warp.Choice.Foreign -> R.string.warp_foreign_hint
-                    Warp.Choice.Psiphon -> R.string.warp_psiphon_hint
-                },
-            ),
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
-@Composable
-private fun RegionChip(code: String?, on: Boolean, onClick: () -> Unit) {
-    Box(Modifier.height(48.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Row(
-            Modifier.height(38.dp).clip(CircleShape).background(Bridge.muted).border(1.dp, if (on) Bridge.brand.copy(alpha = 0.6f) else Color.Transparent, CircleShape).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (code != null) {
-                FlagIcon(code, width = 18.dp)
-                Spacer(Modifier.width(6.dp))
-            }
-            Text(code?.let { countryName(it) } ?: stringResource(R.string.warp_region_any), style = MaterialTheme.typography.labelLarge, color = if (on) Bridge.brand else Bridge.foreground)
         }
     }
 }

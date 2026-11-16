@@ -5,8 +5,11 @@ import android.content.Context
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -67,6 +70,8 @@ class PageShots {
 
     private fun shoot(prefix: String) {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            // The model outlives one test; the update sheet the last one opened would cover these.
+            scenario.onActivity { App.model(it).closeUpdateSheet() }
             for (screen in Screen.entries) {
                 scenario.onActivity { it.show(screen) }
                 shadowOf(Looper.getMainLooper()).idle()
@@ -100,6 +105,27 @@ class PageShots {
             shadowOf(Looper.getMainLooper()).idle()
             compose.waitForIdle()
             compose.onRoot().captureRoboImage(File(out, "$prefix-servers-warp.png").path)
+            // Its box opened in place, with Germany picked.
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            compose.onAllNodesWithText(context.getString(R.string.warp_name)).onFirst().performClick()
+            scenario.onActivity { App.model(it).changeWarpLocation("DE") }
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage(File(out, "$prefix-servers-warp-open.png").path)
+            // Connected through it: the exit in Germany, then Psiphon not connecting and WARP alone leaving from Iran.
+            VpnState.set(VpnState.Status.Running)
+            scenario.onActivity { it.show(Screen.Home) }
+            shadowOf(Looper.getMainLooper()).idle()
+            for ((name, exit) in listOf("home-warp-connected" to Health(Health.State.Ok, 412, "198.51.100.24", "DE", null, 50.1 to 8.7), "home-warp-fell-back" to Health(Health.State.Ok, 186, "198.51.100.24", "IR", null, null))) {
+                scenario.onActivity { App.model(it).pretend(exit, "IR", Traffic(808_000, 22_500, 412_000_000, 18_300_000), BoxConfig.WARP_TAG) }
+                shadowOf(Looper.getMainLooper()).idle()
+                compose.waitForIdle()
+                compose.onRoot().captureRoboImage(File(out, "$prefix-$name.png").path)
+            }
+            VpnState.set(VpnState.Status.Stopped)
+            shadowOf(Looper.getMainLooper()).idle()
+            scenario.onActivity { it.show(Screen.Servers) }
+            shadowOf(Looper.getMainLooper()).idle()
             scenario.onActivity { App.model(it).select(store().servers.first().id) }
             shadowOf(Looper.getMainLooper()).idle()
             val notes = "- **Dashboard:** a new look.\n- Faster updates.\n\n---\n\n<div dir=\"rtl\">\n\n- **داشبورد:** ظاهر تازه.\n- به‌روزرسانی سریع‌تر.\n\n</div>"

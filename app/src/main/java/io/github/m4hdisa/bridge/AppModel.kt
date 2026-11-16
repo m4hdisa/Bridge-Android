@@ -84,9 +84,7 @@ class AppModel(context: Context) {
         private set
     var detailedLog by mutableStateOf(store.detailedLog)
         private set
-    var warpChoice by mutableStateOf(store.warpChoice)
-        private set
-    var psiphonRegion by mutableStateOf(store.psiphonRegion)
+    var warpLocation by mutableStateOf(store.warpLocation)
         private set
 
     /** Free WARP can run on this phone (Android 10 and up, and a build that has Aether). */
@@ -429,9 +427,10 @@ class AppModel(context: Context) {
         updateSheet = true
     }
 
-    /** For PageShots only: how a working connection looks, without a VPN. */
-    internal fun pretend(health: Health, home: String, traffic: Traffic) {
+    /** For PageShots only: how a working connection looks, without a VPN. `through` is the outbound in use. */
+    internal fun pretend(health: Health, home: String, traffic: Traffic, through: String? = null) {
         this.health = health
+        currentTag = through
         homeCountry = home
         this.traffic = traffic
     }
@@ -512,6 +511,13 @@ class AppModel(context: Context) {
     val autoSelected get() = servers.size > 1 && selected != Warp.ID && servers.none { it.id == selected }
 
     val warpSelected get() = Warp.isWarp(selected)
+
+    /**
+     * Whether the running connection goes through Free WARP: what sing-box uses now (its current
+     * outbound), not what is picked, so the dashboard says WARP only while traffic goes there.
+     * Before the first check knows, Free WARP picked and in the running config counts.
+     */
+    val throughWarp get() = running && (currentTag?.let { it == BoxConfig.WARP_TAG } ?: (warpSelected && VpnState.session?.tags?.containsKey(Warp.ID) == true))
 
     /** A subscription address, or text with share links in it (or a JSON config). */
     fun addText(text: String) {
@@ -712,16 +718,20 @@ class AppModel(context: Context) {
         noteReconnect()
     }
 
-    fun changeWarpChoice(choice: Warp.Choice) {
-        store.warpChoice = choice
-        warpChoice = choice
-        if (warpSelected) noteReconnect()
-    }
-
-    fun changePsiphonRegion(region: String?) {
-        store.psiphonRegion = region
-        psiphonRegion = region
-        if (warpSelected && warpChoice == Warp.Choice.Psiphon) noteReconnect()
+    /**
+     * Picks Free WARP's location. That also puts Free WARP in use, and a connection already up
+     * connects again with it, as on Windows.
+     */
+    fun changeWarpLocation(location: String) {
+        val changed = location != warpLocation || !warpSelected
+        store.warpLocation = location
+        warpLocation = location
+        if (!warpSelected) {
+            store.selected = Warp.ID
+            selected = Warp.ID
+            if (warpAvailable) work.execute { WarpRunner(app, File(app.filesDir, BridgeVpnService.WARP_LOG_FILE)).prepareAccount() }
+        }
+        if (changed && status != VpnState.Status.Stopped) reconnect()
     }
 
     fun changeBypassIran(on: Boolean) {

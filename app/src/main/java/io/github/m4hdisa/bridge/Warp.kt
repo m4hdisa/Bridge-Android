@@ -34,6 +34,24 @@ object Warp {
     /** The countries offered for Psiphon's exit. Psiphon decides which it really has at any time. */
     val PSIPHON_REGIONS = listOf("DE", "NL", "GB", "FR", "SE", "FI", "CH", "AT", "CA", "US", "JP", "SG")
 
+    // Free WARP's location, one setting: Fastest and Iran are WARP alone; "Any country" and the
+    // countries are Psiphon carried inside WARP, leaving from there. The same values as Windows.
+    const val FASTEST = ""
+    const val IRAN = "IR"
+    const val ANY = "auto"
+
+    /** Every location in the order offered: the two that pick for you, then Iran, then Psiphon's countries. */
+    val LOCATIONS = listOf(FASTEST, ANY, IRAN) + PSIPHON_REGIONS
+
+    /** Whether this location leaves through Psiphon. */
+    fun usesPsiphon(location: String): Boolean = location != FASTEST && location != IRAN
+
+    /** The country asked of Psiphon for a location, or null for any. */
+    fun psiphonRegion(location: String): String? = location.takeIf { usesPsiphon(it) && it != ANY }
+
+    /** A stored location, or Fastest for one this version doesn't offer. */
+    fun location(stored: String?): String = stored?.takeIf { it in LOCATIONS } ?: FASTEST
+
     /** Aether's Android builds need Android 10. */
     const val MIN_SDK = 29
 
@@ -42,43 +60,26 @@ object Warp {
         H2(listOf("--masque", "--h2", "-4"), "MASQUE over HTTP/2"),
         H2_FRAGMENT(listOf("--masque", "--h2", "--fragment", "-4"), "HTTP/2 + fragment"),
         H2_IPV6(listOf("--masque", "--h2", "-6"), "HTTP/2 over IPv6"),
-
-        // Two hops: the second is opened from inside the first, so Cloudflare gives a foreign exit.
-        GOOL(listOf("--gool", "--h2", "-4"), "Gool (WARP in WARP)"),
-        MIM_H2(listOf("--mim", "--h2", "-4"), "MASQUE in MASQUE over HTTP/2"),
-        ;
-
-        val twoHops get() = this == GOOL || this == MIM_H2
     }
 
-    /** What the WARP card offers. */
-    enum class Choice { Auto, Foreign, Psiphon }
-
-    private val FAST = listOf(Method.H3, Method.H2, Method.H2_FRAGMENT, Method.H2_IPV6)
-
-    /** The methods raced at once for a choice. Psiphon is there for the exit, so a second WARP hop would only cost speed. */
-    fun methods(choice: Choice): List<Method> = when (choice) {
-        Choice.Foreign -> listOf(Method.GOOL, Method.MIM_H2) + FAST
-        else -> FAST
-    }
+    // Two hops (WARP in WARP) are gone: from Iran they still mostly got an Iranian exit, and a
+    // country is now Psiphon's job. Every connect races all four ways above.
 
     class Psiphon(val bin: String, val port: Int, val region: String?)
 
     /** One attempt's command line. Every question Aether could ask has a flag here, so it never waits for input. */
     fun args(method: Method, port: Int, configFile: String, psiphon: Psiphon? = null, peer: String? = null): List<String> = buildList {
         addAll(method.args)
-        // A gateway that worked last time: no scan. For two hops it is the outer one.
-        if (peer != null) addAll(listOf(if (method == Method.MIM_H2) "--mim-outer" else "--peer", peer))
-        // Stop at the first gateway that passes real traffic; with two hops "verified" keeps them in separate ranges.
+        // A gateway that worked last time: no scan.
+        if (peer != null) addAll(listOf("--peer", peer))
+        // Stop at the first gateway that passes real traffic.
         add("--scan")
-        add(if (method.twoHops) "verified" else "turbo")
+        add("turbo")
         add("--quick-reconnect")
         add("--bind")
         add("127.0.0.1:$port")
         add("--config")
         add(configFile)
-        // Two hops are there for the foreign exit, so they refuse an Iranian one and look again.
-        if (method.twoHops) addAll(listOf("--exit-loc", "!IR"))
         if (psiphon != null) {
             addAll(listOf("--psiphon", "--psiphon-bin", psiphon.bin, "--psiphon-bind", "127.0.0.1:${psiphon.port}"))
             psiphon.region?.let { addAll(listOf("--psiphon-region", it)) }
@@ -103,7 +104,6 @@ object Warp {
     /** The Cloudflare gateway Aether connects to ("[+] using cloudflare edge 162.159.198.131:443"). */
     fun gateway(text: String): String? =
         Regex("using cloudflare edge (\\S+:\\d+)").find(text)?.groupValues?.get(1)
-            ?: Regex("masque-in-masque ready: (\\S+:\\d+) \\(outer\\)").find(text)?.groupValues?.get(1)
 
     /** Only Cloudflare's WARP ranges can be a gateway, so a saved one can't point anywhere else. */
     fun isGateway(peer: String): Boolean {
@@ -116,9 +116,6 @@ object Warp {
         return Regex("^\\[2606:4700:[0-9a-fA-F:]+\\]:(\\d{1,5})$").find(peer)?.groupValues?.get(1)?.toInt() in 1..65535
     }
 
-    /** Aether's line when it drops a tunnel over its exit country; after a few, two hops won't get a foreign exit here. */
-    val EXIT_REFUSED = Regex("exit location [A-Z]{2} rejected")
-    const val MAX_EXIT_REFUSED = 5
     val NO_IPV6 = Regex("host has no IPv6 route")
 
     private val IDENTITY_FIELDS = setOf(
