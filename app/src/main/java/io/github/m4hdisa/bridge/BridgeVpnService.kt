@@ -14,6 +14,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.os.SystemClock
 import android.system.OsConstants
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -43,8 +44,10 @@ import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
+import java.net.HttpURLConnection
 import java.net.NetworkInterface
 import java.net.ServerSocket
+import java.net.URL
 import java.util.UUID
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -78,26 +81,39 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         }
         if (VpnState.status != VpnState.Status.Stopped) return START_NOT_STICKY
         stopping = false
+        recovery = WarpRecovery()
         VpnState.set(VpnState.Status.Starting)
         showNotification()
         Thread { startVpn() }.start()
         return START_NOT_STICKY
     }
 
-    private fun startVpn(): Unit = synchronized(lock) {
+    /** Free WARP's tries at connecting again, for the connection the user started. */
+    @Volatile
+    private var recovery = WarpRecovery()
+
+    /** Connects. `again` is Bridge connecting Free WARP again by itself: the logs then go on, so they show why. */
+    private fun startVpn(again: Boolean = false): Unit = synchronized(lock) {
+        // A disconnect that came while this waited for the lock wins.
+        if (stopping) return@synchronized
         try {
             val store = Store(this)
             val clash = LocalAccess(freePort(), "", secret())
             val proxy = LocalAccess(freePort(), secret().take(12), secret())
-            val log = File(filesDir, LOG_FILE).apply { delete() }
-            File(filesDir, XRAY_LOG_FILE).delete()
-            val warpLog = File(filesDir, WARP_LOG_FILE).apply { delete() }
+            val log = File(filesDir, LOG_FILE).apply { if (!again) delete() }
+            if (!again) File(filesDir, XRAY_LOG_FILE).delete()
+            val warpLog = File(filesDir, WARP_LOG_FILE).apply { if (!again) delete() }
             var input = Profile.input(store, Rules.install(this))
                 // With FakeIP the made-up answers are kept in one file across connections, since
                 // apps keep using them after a reconnect; otherwise each connection has a file of its own.
                 .copy(logPath = log.path, clash = clash, proxy = proxy, cachePath = if (store.fakeIp) File(filesDir, FAKEIP_CACHE).path else freshCacheFile().path)
             if (Warp.isWarp(store.selected)) {
                 val runner = WarpRunner(this, warpLog).also { warp = it }
+                // A disconnect just before the runner existed couldn't stop it.
+                if (stopping) {
+                    runner.stop()
+                    return@synchronized
+                }
                 val died = { if (VpnState.status == VpnState.Status.Running) fail(getString(R.string.warp_died)) }
                 val port = runner.start(store.warpChoice, store.psiphonRegion, { VpnState.progress(it) }, died)
                 if (stopping) return@synchronized
@@ -136,6 +152,7 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             showSpeed(clash)
             // The account a public starter one stood in for, made through the tunnel now that it works.
             warp?.let { w -> Thread { runCatching { w.replaceStarterAccount(proxy) } }.apply { isDaemon = true }.start() }
+            if (warp != null) watchWarp(clash)
         } catch (e: WarpException) {
             Log.e(TAG, "WARP failed", e)
             if (!stopping) cleanUp(getString(e.res))
@@ -230,6 +247,14 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun cleanUp(error: String?) {
+        tearDown()
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        VpnState.set(VpnState.Status.Stopped, error)
+        stopSelf()
+    }
+
+    /** Ends the connection's parts: the tunnel, sing-box, Xray, WARP and the network watch. */
+    private fun tearDown() {
         VpnState.session = null
         runCatching { tun?.close() }
         tun = null
@@ -242,12 +267,79 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         warp = null
         runCatching { monitor?.stop() }
         monitor = null
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        VpnState.set(VpnState.Status.Stopped, error)
-        stopSelf()
     }
 
     override fun onRevoke() = stopVpn()
+
+    /**
+     * Checks a Free WARP connection every 20 seconds with a real request through it, and connects
+     * it again when it stops carrying traffic (see WarpRecovery). This runs in the service, so it
+     * works with Bridge closed too; the dashboard's own check only runs while it is open.
+     */
+    private fun watchWarp(clash: LocalAccess) {
+        val recovery = recovery
+        Thread {
+            while (true) {
+                val until = SystemClock.elapsedRealtime() + WarpRecovery.CHECK_EVERY_MS
+                while (isLive(clash) && SystemClock.elapsedRealtime() < until) Thread.sleep(1_000)
+                if (!isLive(clash)) return@Thread
+                val ok = Clash.delay(clash, "proxy", CHECK_TIMEOUT_MS) > 0
+                if (!isLive(clash)) return@Thread
+                if (!recovery.afterCheck(ok, SystemClock.elapsedRealtime(), ::internetWorks)) continue
+                val tries = recovery.tries
+                warpNote("Free WARP stopped carrying traffic, so Bridge connects it again${if (tries > 1) " (try $tries)" else ""}")
+                connectAgain()
+                return@Thread
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    // Not VpnState.status: that changes on the main thread, a moment after the session does.
+    private fun isLive(clash: LocalAccess) = !stopping && VpnState.session?.clash === clash
+
+    /**
+     * Whether the phone's own internet works, asked on the real network (Wi-Fi or mobile data),
+     * never through the VPN: Cloudflare first, Google's connectivity check if that is blocked.
+     */
+    private fun internetWorks(): Boolean {
+        val network = monitor?.defaultNetwork ?: return false
+        return INTERNET_CHECKS.any { url ->
+            runCatching {
+                val connection = network.openConnection(URL(url)) as HttpURLConnection
+                try {
+                    connection.connectTimeout = CHECK_TIMEOUT_MS
+                    connection.readTimeout = CHECK_TIMEOUT_MS
+                    connection.instanceFollowRedirects = false
+                    connection.responseCode > 0
+                } finally {
+                    connection.disconnect()
+                }
+            }.getOrDefault(false)
+        }
+    }
+
+    /**
+     * Connects Free WARP again in place: the old connection's parts end and a new one starts, as
+     * if the user had connected, but without leaving the notification. A disconnect meanwhile
+     * cancels it like any connect.
+     */
+    private fun connectAgain() {
+        Thread {
+            synchronized(lock) {
+                if (stopping) return@synchronized
+                tearDown()
+                VpnState.set(VpnState.Status.Starting)
+                runCatching { getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(getString(R.string.status_starting))) }
+                startVpn(again = true)
+            }
+        }.start()
+    }
+
+    /** A line in the Free WARP log, which the Logs page shows. */
+    private fun warpNote(text: String) {
+        runCatching { File(filesDir, WARP_LOG_FILE).appendText("$text\n") }
+        Log.w(TAG, text)
+    }
 
     /** The speed in the notification, every second while connected, from the Clash API. */
     private fun showSpeed(clash: LocalAccess) {
@@ -507,6 +599,8 @@ class BridgeVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         private const val CACHE_PREFIX = "box-cache-"
         private const val FAKEIP_CACHE = "fakeip-cache.db"
         private const val RESOLVE_TIMEOUT_MS = 5_000L
+        private const val CHECK_TIMEOUT_MS = 8_000
+        private val INTERNET_CHECKS = listOf(AppModel.TRACE_URL, "http://connectivitycheck.gstatic.com/generate_204")
         private const val TAG = "Bridge"
         private const val CHANNEL = "vpn"
         private const val NOTIFICATION_ID = 1

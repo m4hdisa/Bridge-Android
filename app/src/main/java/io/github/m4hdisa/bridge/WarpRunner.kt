@@ -89,7 +89,10 @@ class WarpRunner(private val context: Context, private val log: File) {
             }
             Thread.sleep(2_000)
         }
-        throw WarpException(R.string.warp_psiphon_failed, "Psiphon didn't connect through WARP within ${PSIPHON_READY_MS / 1000} s")
+        // WARP itself works, so the connection goes on without Psiphon rather than failing.
+        note("Psiphon didn't connect through WARP within ${PSIPHON_READY_MS / 1000} s, so Bridge connects with Fastest (WARP alone) instead")
+        exit = null
+        return won.port
     }
 
     /** Keeps the winning tunnel, watches it, and returns the port sing-box should use (Psiphon's when it rides along). */
@@ -109,6 +112,11 @@ class WarpRunner(private val context: Context, private val log: File) {
     /** Stops every Aether this runner started (each stops its own Psiphon). */
     fun stop() {
         cancelled = true
+        stopProcesses()
+    }
+
+    /** Ends the Aethers without cancelling: a lost race does this and the next one still runs. */
+    private fun stopProcesses() {
         winner = null
         for (p in processes) p.destroy()
         processes.clear()
@@ -283,8 +291,8 @@ class WarpRunner(private val context: Context, private val log: File) {
                 }
             }
         }
-        stop()
-        cancelled = false
+        // Only this race's Aethers end: clearing a cancel here once let a cancelled connect start the next race.
+        stopProcesses()
         throw WarpException(R.string.warp_no_way, "Free WARP could not connect on this network. ${reasons.joinToString("; ")}")
     }
 
@@ -292,8 +300,15 @@ class WarpRunner(private val context: Context, private val log: File) {
     private fun launch(args: List<String>, tag: String, onLine: (Process, String) -> Unit = { _, _ -> }): Process {
         val builder = ProcessBuilder(listOf(aether.path) + args).directory(dir).redirectErrorStream(true)
         builder.environment()["SSL_CERT_DIR"] = "/system/etc/security/cacerts"
+        // No new Aether after a cancel, even one that was starting just as it came.
+        checkCancelled()
         val process = builder.start()
         processes += process
+        if (cancelled) {
+            process.destroy()
+            processes -= process
+            checkCancelled()
+        }
         runCatching { process.outputStream.close() }
         Thread {
             runCatching {

@@ -164,7 +164,6 @@
     <string name="warp_region">کشور خروجی</string>
     <string name="warp_region_any">هر کشوری</string>
     <string name="warp_unavailable">WARP رایگان به اندروید ۱۰ یا جدیدتر نیاز دارد.</string>
-    <string name="warp_psiphon_failed">Psiphon در یک دقیقه و نیم از داخل WARP وصل نشد. برای استفاده از خود WARP روش اتصال دیگری انتخاب کنید.</string>
     <string name="warp_no_account">WARP رایگان نتوانست حساب WARP بسازد، چون سرویس WARP کلادفلر الان روی این شبکه مسدود است. کمی بعد یا روی شبکه‌ی دیگری دوباره امتحان کنید.</string>
     <string name="warp_no_way">WARP رایگان الان راهی برای عبور از این شبکه پیدا نکرد. جزئیات در لاگ‌ها هست.</string>
     <string name="warp_died">WARP ناگهان متوقف شد. جزئیات در لاگ‌ها هست.</string>

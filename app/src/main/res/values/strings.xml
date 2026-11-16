@@ -167,7 +167,6 @@
     <string name="warp_region">Exit country</string>
     <string name="warp_region_any">Any country</string>
     <string name="warp_unavailable">Free WARP needs Android 10 or newer.</string>
-    <string name="warp_psiphon_failed">Psiphon didn\'t connect through WARP within a minute and a half. Choose another connection method to use WARP alone.</string>
     <string name="warp_no_account">Free WARP could not create a WARP account, because Cloudflare\'s WARP service is blocked on this network right now. Try again later or on another network.</string>
     <string name="warp_no_way">Free WARP found no way through this network right now. The details are in Logs.</string>
     <string name="warp_died">WARP stopped unexpectedly. The details are in Logs.</string>
